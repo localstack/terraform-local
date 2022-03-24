@@ -1,0 +1,120 @@
+#!/usr/bin/env python
+
+"""
+Thin wrapper around the "terraform" command line interface (CLI) for use
+with LocalStack.
+
+The "tflocal" CLI allows you to easily interact with your local services
+without having to specify the local endpoints in the "provider" section of
+your TF config.
+"""
+
+import os
+import sys
+import subprocess
+
+PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
+if os.path.isdir(os.path.join(PARENT_FOLDER, '.venv')):
+    sys.path.insert(0, PARENT_FOLDER)
+
+from localstack_client import config  # noqa: E402
+
+S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or "s3.localhost.localstack.cloud"
+USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
+TF_CMD = os.environ.get("TF_CMD") or "terraform"
+LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
+LOCALSTACK_HOSTNAME = os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
+EDGE_PORT = int(os.environ.get("EDGE_PORT") or 4566)
+TF_PROVIDER_CONFIG = """
+provider "aws" {
+ endpoints {
+<endpoints>
+ }
+}
+"""
+
+
+def create_provider_config_file():
+    # maps services to be replaced with alternative names
+    service_replaces = {
+        "apigatewaymanagementapi": "",
+        "ce": "costexplorer",
+        "edge": "",
+        "iotdata": "",
+        "iotjobsdata": "",
+        "logs": "cloudwatchlogs",
+        "opensearch": "",
+        "timestream": ""
+    }
+
+    # create list of service names
+    services = list(config.get_service_ports())
+    services = [s.replace("-", "") for s in services]
+    for old, new in service_replaces.items():
+        try:
+            services.remove(old)
+            if new:
+                services.append(new)
+        except ValueError:
+            pass
+    services = sorted(services)
+
+    # create config
+    endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
+    tf_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
+
+    # write temporary config file
+    if os.path.exists(LS_PROVIDERS_FILE):
+        msg = f"Providers override file {LS_PROVIDERS_FILE} already exists - please delete it first"
+        raise Exception(msg)
+    with open(LS_PROVIDERS_FILE, mode="w") as fp:
+        fp.write(tf_config)
+    return LS_PROVIDERS_FILE
+
+
+def get_service_endpoint(service):
+    hostname = S3_HOSTNAME if service == "s3" else LOCALSTACK_HOSTNAME
+    return f"http://{hostname}:{EDGE_PORT}"
+
+
+def to_bytes(obj) -> bytes:
+    return obj.encode("UTF-8") if isinstance(obj, str) else obj
+
+
+def to_str(obj) -> bytes:
+    return obj.decode("UTF-8") if isinstance(obj, bytes) else obj
+
+
+def run_tf_exec(cmd, env):
+    """Run terraform using os.exec - can be useful as it does not require any I/O
+        handling for stdin/out/err. Does *not* allow us to perform any cleanup logic."""
+    os.execvpe(cmd[0], cmd, env=env)
+
+
+def run_tf_subprocess(cmd, env):
+    """Run terraform in a subprocess - useful to perform cleanup logic at the end."""
+    process = subprocess.Popen(
+        cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stdout)
+    process.communicate()
+    sys.exit(process.returncode)
+
+
+def main():
+    env = dict(os.environ)
+    cmd = [TF_CMD] + sys.argv[1:]
+
+    # create TF provider config file
+    config_file = create_provider_config_file()
+
+    # call terraform command
+    try:
+        if USE_EXEC:
+            run_tf_exec(cmd, env)
+        else:
+            run_tf_subprocess(cmd, env)
+    finally:
+        os.remove(config_file)
+
+
+if __name__ == '__main__':
+    main()
