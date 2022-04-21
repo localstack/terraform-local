@@ -19,7 +19,8 @@ if os.path.isdir(os.path.join(PARENT_FOLDER, '.venv')):
 
 from localstack_client import config  # noqa: E402
 
-S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or "s3.localhost.localstack.cloud"
+LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
+S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
@@ -27,11 +28,16 @@ LOCALSTACK_HOSTNAME = os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
 EDGE_PORT = int(os.environ.get("EDGE_PORT") or 4566)
 TF_PROVIDER_CONFIG = """
 provider "aws" {
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
  endpoints {
 <endpoints>
  }
 }
 """
+PROCESS = None
 
 
 def create_provider_config_file():
@@ -72,8 +78,22 @@ def create_provider_config_file():
     return LS_PROVIDERS_FILE
 
 
-def get_service_endpoint(service):
-    hostname = S3_HOSTNAME if service == "s3" else LOCALSTACK_HOSTNAME
+def get_service_endpoint(service: str) -> str:
+    # allow configuring a custom endpoint via the environment
+    env_name = f"{service.replace('-', '_').upper().strip()}_ENDPOINT"
+    env_endpoint = os.environ.get(env_name, "").strip()
+    if env_endpoint:
+        if "://" not in env_endpoint:
+            env_endpoint = f"http://{env_endpoint}"
+        return env_endpoint
+
+    # some services need specific hostnames
+    hostname = LOCALSTACK_HOSTNAME
+    if service == "s3":
+        hostname = S3_HOSTNAME
+    elif service == "mwaa":
+        hostname = f"mwaa.{LOCALHOST_HOSTNAME}"
+
     return f"http://{hostname}:{EDGE_PORT}"
 
 
@@ -93,10 +113,20 @@ def run_tf_exec(cmd, env):
 
 def run_tf_subprocess(cmd, env):
     """Run terraform in a subprocess - useful to perform cleanup logic at the end."""
-    process = subprocess.Popen(
+    global PROCESS
+
+    # register signal handlers
+    import signal
+    signal.signal(signal.SIGINT, signal_handler)
+
+    PROCESS = subprocess.Popen(
         cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stdout)
-    process.communicate()
-    sys.exit(process.returncode)
+    PROCESS.communicate()
+    sys.exit(PROCESS.returncode)
+
+
+def signal_handler(sig, frame):
+    PROCESS.send_signal(sig)
 
 
 def main():

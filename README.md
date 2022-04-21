@@ -27,6 +27,7 @@ The following environment variables can be configured:
 * `EDGE_PORT`: port number of the target LocalStack instance
 * `S3_HOSTNAME`: special hostname to be used to connect to LocalStack S3 (default: `s3.localhost.localstack.cloud`)
 * `USE_EXEC`: whether to use `os.exec` instead of `subprocess.Popen` (try using this in case of I/O issues)
+* `<SERVICE>_ENDPOINT`: setting a custom service endpoint, e.g., `COGNITO_IDP_ENDPOINT=http://example.com`
 
 ## Usage
 
@@ -35,6 +36,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.2: Add ability to specify custom endpoints; pass INT signals to subprocess
 * v0.1: Initial release
 
 ## License
