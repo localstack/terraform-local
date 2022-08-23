@@ -70,12 +70,21 @@ def create_provider_config_file():
     tf_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
 
     # write temporary config file
-    if os.path.exists(LS_PROVIDERS_FILE):
-        msg = f"Providers override file {LS_PROVIDERS_FILE} already exists - please delete it first"
+    providers_file = get_providers_file_path()
+    if os.path.exists(providers_file):
+        msg = f"Providers override file {providers_file} already exists - please delete it first"
         raise Exception(msg)
-    with open(LS_PROVIDERS_FILE, mode="w") as fp:
+    with open(providers_file, mode="w") as fp:
         fp.write(tf_config)
-    return LS_PROVIDERS_FILE
+    return providers_file
+
+
+def get_providers_file_path() -> str:
+    chdir = [arg for arg in sys.argv if arg.startswith("-chdir=")]
+    base_dir = "."
+    if chdir:
+        base_dir = chdir[0].removeprefix("-chdir=")
+    return os.path.join(base_dir, LS_PROVIDERS_FILE)
 
 
 def get_service_endpoint(service: str) -> str:
