@@ -8,16 +8,19 @@ usage:        ## Show this help
 install:      ## Install dependencies in local virtualenv folder
 	(test `which virtualenv` || $(PIP_CMD) install --user virtualenv) && \
 		(test -e $(VENV_DIR) || virtualenv $(VENV_OPTS) $(VENV_DIR)) && \
-		($(VENV_RUN); $(PIP_CMD) install -e .)
+		($(VENV_RUN); $(PIP_CMD) install -e .[test])
+
+lint:         ## Run code linter
+	$(VENV_RUN); flake8 --ignore=E501,W503 bin/tflocal tests
+
+test:         ## Run unit/integration tests
+	$(VENV_RUN); pytest $(PYTEST_ARGS) -sv tests
 
 publish:      ## Publish the library to the central PyPi repository
 	# build and upload archive
 	($(VENV_RUN) && pip install setuptools && ./setup.py sdist && twine upload dist/*)
 
-lint:         ## Run code linter
-	flake8 bin/tflocal --ignore=E501,W503
-
 clean:        ## Clean up
 	rm -rf $(VENV_DIR)
 
-.PHONY: clean publish install usage lint
+.PHONY: clean publish install usage lint test

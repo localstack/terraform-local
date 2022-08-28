@@ -36,6 +36,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.4: Fix using use_s3_path_style for S3_HOSTNAME=localhost; exclude `meteringmarketplace` service endpoint
 * v0.3: Fix support for -chdir=... to create providers file in target directory
 * v0.2: Add ability to specify custom endpoints; pass INT signals to subprocess
 * v0.1: Initial release

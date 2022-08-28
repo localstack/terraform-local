@@ -10,6 +10,7 @@ your TF config.
 """
 
 import os
+import re
 import sys
 import subprocess
 
@@ -32,6 +33,7 @@ provider "aws" {
   secret_key                  = "test"
   skip_credentials_validation = true
   skip_metadata_api_check     = true
+  <configs>
  endpoints {
 <endpoints>
  }
@@ -52,9 +54,12 @@ def create_provider_config_file():
         "opensearch": "",
         "timestream": ""
     }
+    # service names to be excluded (not yet available in TF)
+    service_excludes = ["meteringmarketplace"]
 
     # create list of service names
     services = list(config.get_service_ports())
+    services = [srvc for srvc in services if srvc not in service_excludes]
     services = [s.replace("-", "") for s in services]
     for old, new in service_replaces.items():
         try:
@@ -68,6 +73,8 @@ def create_provider_config_file():
     # create config
     endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
     tf_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
+    additional_configs = "s3_use_path_style = true" if use_s3_path_style() else ""
+    tf_config = tf_config.replace("<configs>", additional_configs)
 
     # write temporary config file
     providers_file = get_providers_file_path()
@@ -104,6 +111,11 @@ def get_service_endpoint(service: str) -> str:
         hostname = f"mwaa.{LOCALHOST_HOSTNAME}"
 
     return f"http://{hostname}:{EDGE_PORT}"
+
+
+def use_s3_path_style() -> bool:
+    regex = r"^[a-z]+://(localhost|[0-9.]+)(:[0-9]+)?$"
+    return bool(re.match(regex, get_service_endpoint("s3")))
 
 
 def to_bytes(obj) -> bytes:
