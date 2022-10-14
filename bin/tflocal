@@ -20,6 +20,7 @@ if os.path.isdir(os.path.join(PARENT_FOLDER, '.venv')):
 
 from localstack_client import config  # noqa: E402
 
+DEFAULT_REGION = "us-east-1"
 LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
@@ -73,8 +74,11 @@ def create_provider_config_file():
     # create config
     endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
     tf_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
-    additional_configs = "s3_use_path_style = true" if use_s3_path_style() else ""
-    tf_config = tf_config.replace("<configs>", additional_configs)
+    additional_configs = []
+    if use_s3_path_style():
+        additional_configs += [" s3_use_path_style = true"]
+    additional_configs += [f' region = "{get_region()}"']
+    tf_config = tf_config.replace("<configs>", "\n".join(additional_configs))
 
     # write temporary config file
     providers_file = get_providers_file_path()
@@ -116,6 +120,22 @@ def get_service_endpoint(service: str) -> str:
 def use_s3_path_style() -> bool:
     regex = r"^[a-z]+://(localhost|[0-9.]+)(:[0-9]+)?$"
     return bool(re.match(regex, get_service_endpoint("s3")))
+
+
+def get_region() -> str:
+    region = str(os.environ.get("AWS_DEFAULT_REGION") or "").strip()
+    if region:
+        return region
+    try:
+        # If boto3 is installed, try to get the region from local credentials.
+        # Note that boto3 is currently not included in the dependencies, to
+        # keep the library lightweight.
+        import boto3
+        return boto3.session.Session().region_name
+    except Exception:
+        pass
+    # fall back to default region
+    return DEFAULT_REGION
 
 
 def to_bytes(obj) -> bytes:

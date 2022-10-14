@@ -28,6 +28,7 @@ The following environment variables can be configured:
 * `S3_HOSTNAME`: special hostname to be used to connect to LocalStack S3 (default: `s3.localhost.localstack.cloud`)
 * `USE_EXEC`: whether to use `os.exec` instead of `subprocess.Popen` (try using this in case of I/O issues)
 * `<SERVICE>_ENDPOINT`: setting a custom service endpoint, e.g., `COGNITO_IDP_ENDPOINT=http://example.com`
+* `AWS_DEFAULT_REGION`: the AWS region to use (default: `us-east-1`, or determined from local credentials if `boto3` is installed)
 
 ## Usage
 
@@ -36,6 +37,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.5: Make AWS region configurable, add `region` to provider config
 * v0.4: Fix using use_s3_path_style for S3_HOSTNAME=localhost; exclude `meteringmarketplace` service endpoint
 * v0.3: Fix support for -chdir=... to create providers file in target directory
 * v0.2: Add ability to specify custom endpoints; pass INT signals to subprocess
