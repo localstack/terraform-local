@@ -37,6 +37,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.6: Fix selection of default region
 * v0.5: Make AWS region configurable, add `region` to provider config
 * v0.4: Fix using use_s3_path_style for S3_HOSTNAME=localhost; exclude `meteringmarketplace` service endpoint
 * v0.3: Fix support for -chdir=... to create providers file in target directory

@@ -131,11 +131,11 @@ def get_region() -> str:
         # Note that boto3 is currently not included in the dependencies, to
         # keep the library lightweight.
         import boto3
-        return boto3.session.Session().region_name
+        region = boto3.session.Session().region_name
     except Exception:
         pass
     # fall back to default region
-    return DEFAULT_REGION
+    return region or DEFAULT_REGION
 
 
 def to_bytes(obj) -> bytes:
