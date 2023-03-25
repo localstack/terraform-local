@@ -35,6 +35,35 @@ def test_use_s3_path_style(monkeypatch):
     assert use_s3_path_style()  # noqa
 
 
+def test_provider_aliases(monkeypatch):
+    queue_name1 = f"q{short_uid()}"
+    queue_name2 = f"q{short_uid()}"
+    config = """
+    provider "aws" {
+      region = "eu-west-1"
+    }
+    provider "aws" {
+      alias  = "us_east_2"
+      region = "us-east-2"
+    }
+    resource "aws_sqs_queue" "queue1" {
+      name = "%s"
+    }
+    resource "aws_sqs_queue" "queue2" {
+      name = "%s"
+      provider = aws.us_east_2
+    }
+    """ % (queue_name1, queue_name2)
+    deploy_tf_script(config)
+
+    sqs1 = client("sqs", region_name="eu-west-1")
+    sqs2 = client("sqs", region_name="us-east-2")
+    queues1 = [q for q in sqs1.list_queues().get("QueueUrls", [])]
+    queues2 = [q for q in sqs2.list_queues().get("QueueUrls", [])]
+    assert any(queue_name1 in queue_url for queue_url in queues1)
+    assert any(queue_name2 in queue_url for queue_url in queues2)
+
+
 ###
 # UTIL FUNCTIONS
 ###
@@ -54,12 +83,13 @@ def short_uid() -> str:
     return str(uuid.uuid4())[0:8]
 
 
-def client(service: str):
+def client(service: str, **kwargs):
     return boto3.client(
         service,
         aws_access_key_id="test",
         aws_secret_access_key="test",
-        endpoint_url=LOCALSTACK_ENDPOINT
+        endpoint_url=LOCALSTACK_ENDPOINT,
+        **kwargs,
     )
 
 
