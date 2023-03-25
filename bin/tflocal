@@ -20,6 +20,7 @@ if os.path.isdir(os.path.join(PARENT_FOLDER, '.venv')):
     sys.path.insert(0, PARENT_FOLDER)
 
 from localstack_client import config  # noqa: E402
+import hcl2  # noqa: E402
 
 DEFAULT_REGION = "us-east-1"
 LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
@@ -167,17 +168,16 @@ def to_str(obj) -> bytes:
 def determine_provider_aliases() -> list:
     """Return a list of providers (and aliases) configured in the *.tf files (if any)"""
     result = []
-    try:
-        import hcl2
-        for _file in glob.glob('*.tf'):
+    for _file in glob.glob('*.tf'):
+        try:
             with open(_file, 'r') as fp:
                 obj = hcl2.load(fp)
             providers = obj.get("provider", [])
             providers = [providers] if not isinstance(providers, list) else providers
             aws_providers = [prov["aws"] for prov in providers if prov.get("aws")]
             result.extend(aws_providers)
-    except Exception:
-        pass
+        except Exception as e:
+            print(f"Warning: Unable to extract providers from {_file}:", e)
     return result
 
 
