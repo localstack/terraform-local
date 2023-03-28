@@ -12,6 +12,7 @@ your TF config.
 import os
 import re
 import sys
+import glob
 import subprocess
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -19,6 +20,7 @@ if os.path.isdir(os.path.join(PARENT_FOLDER, '.venv')):
     sys.path.insert(0, PARENT_FOLDER)
 
 from localstack_client import config  # noqa: E402
+import hcl2  # noqa: E402
 
 DEFAULT_REGION = "us-east-1"
 LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
@@ -43,7 +45,9 @@ provider "aws" {
 PROCESS = None
 
 
-def create_provider_config_file():
+def create_provider_config_file(provider_aliases=None):
+    provider_aliases = provider_aliases or []
+
     # maps services to be replaced with alternative names
     service_replaces = {
         "apigatewaymanagementapi": "",
@@ -71,14 +75,28 @@ def create_provider_config_file():
             pass
     services = sorted(services)
 
-    # create config
-    endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
-    tf_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
-    additional_configs = []
-    if use_s3_path_style():
-        additional_configs += [" s3_use_path_style = true"]
-    additional_configs += [f' region = "{get_region()}"']
-    tf_config = tf_config.replace("<configs>", "\n".join(additional_configs))
+    # add default (non-aliased) provider, if not defined yet
+    default_provider = [p for p in provider_aliases if not p.get("alias")]
+    if not default_provider:
+        provider_aliases.append({"region": get_region()})
+
+    # create provider configs
+    provider_configs = []
+    for provider in provider_aliases:
+        endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
+        provider_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
+        additional_configs = []
+        if use_s3_path_style():
+            additional_configs += [" s3_use_path_style = true"]
+        if provider.get("alias"):
+            additional_configs += [f' alias = "{provider["alias"]}"']
+        region = provider.get("region") or get_region()
+        additional_configs += [f' region = "{region}"']
+        provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
+        provider_configs.append(provider_config)
+
+    # construct final config file content
+    tf_config = "\n".join(provider_configs)
 
     # write temporary config file
     providers_file = get_providers_file_path()
@@ -91,6 +109,7 @@ def create_provider_config_file():
 
 
 def get_providers_file_path() -> str:
+    """Determine the path under which the providers override file should be stored"""
     chdir = [arg for arg in sys.argv if arg.startswith("-chdir=")]
     base_dir = "."
     if chdir:
@@ -146,6 +165,22 @@ def to_str(obj) -> bytes:
     return obj.decode("UTF-8") if isinstance(obj, bytes) else obj
 
 
+def determine_provider_aliases() -> list:
+    """Return a list of providers (and aliases) configured in the *.tf files (if any)"""
+    result = []
+    for _file in glob.glob('*.tf'):
+        try:
+            with open(_file, 'r') as fp:
+                obj = hcl2.load(fp)
+            providers = obj.get("provider", [])
+            providers = [providers] if not isinstance(providers, list) else providers
+            aws_providers = [prov["aws"] for prov in providers if prov.get("aws")]
+            result.extend(aws_providers)
+        except Exception as e:
+            print(f"Warning: Unable to extract providers from {_file}:", e)
+    return result
+
+
 def run_tf_exec(cmd, env):
     """Run terraform using os.exec - can be useful as it does not require any I/O
         handling for stdin/out/err. Does *not* allow us to perform any cleanup logic."""
@@ -175,7 +210,8 @@ def main():
     cmd = [TF_CMD] + sys.argv[1:]
 
     # create TF provider config file
-    config_file = create_provider_config_file()
+    providers = determine_provider_aliases()
+    config_file = create_provider_config_file(providers)
 
     # call terraform command
     try:
