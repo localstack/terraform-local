@@ -56,7 +56,6 @@ def create_provider_config_file(provider_aliases=None):
         "iotdata": "",
         "iotjobsdata": "",
         "logs": "cloudwatchlogs",
-        "opensearch": "",
         "timestream": ""
     }
     # service names to be excluded (not yet available in TF)
