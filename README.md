@@ -37,6 +37,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.9: Fix unsupported provider override for emrserverless
 * v0.8: Configure the endpoint for opensearch service
 * v0.7: Add initial support for provider aliases
 * v0.6: Fix selection of default region
