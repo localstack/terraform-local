@@ -53,6 +53,7 @@ def create_provider_config_file(provider_aliases=None):
         "apigatewaymanagementapi": "",
         "ce": "costexplorer",
         "edge": "",
+        "emrserverless": "",
         "iotdata": "",
         "iotjobsdata": "",
         "logs": "cloudwatchlogs",
