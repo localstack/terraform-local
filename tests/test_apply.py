@@ -64,6 +64,42 @@ def test_provider_aliases(monkeypatch):
     assert any(queue_name2 in queue_url for queue_url in queues2)
 
 
+def test_s3_backend():
+    state_bucket = f"tf-state-{short_uid()}"
+    state_table = f"tf-state-{short_uid()}"
+    bucket_name = f"bucket.{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        dynamodb_table = "%s"
+        region = "us-east-2"
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, state_table, bucket_name)
+    deploy_tf_script(config)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name="us-east-2")
+    result = s3.list_objects(Bucket=state_bucket)
+    keys = [obj["Key"] for obj in result["Contents"]]
+    assert "terraform.tfstate" in keys
+
+    # assert that DynamoDB table with state file locks exists
+    dynamodb = client("dynamodb", region_name="us-east-2")
+    result = dynamodb.describe_table(TableName=state_table)
+    attrs = result["Table"]["AttributeDefinitions"]
+    assert attrs == [{"AttributeName": "LockID", "AttributeType": "S"}]
+
+    # assert that S3 resource has been created
+    s3 = client("s3")
+    s3.head_bucket(Bucket=bucket_name)
+
+
 ###
 # UTIL FUNCTIONS
 ###

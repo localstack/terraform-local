@@ -42,8 +42,31 @@ provider "aws" {
  }
 }
 """
+TF_S3_BACKEND_CONFIG = """
+terraform {
+  backend "s3" {
+    region         = "<region>"
+    bucket         = "<bucket>"
+    key            = "<key>"
+    dynamodb_table = "<dynamodb_table>"
+
+    access_key        = "test"
+    secret_key        = "test"
+    endpoint          = "<s3_endpoint>"
+    iam_endpoint      = "<iam_endpoint>"
+    sts_endpoint      = "<sts_endpoint>"
+    dynamodb_endpoint = "<dynamodb_endpoint>"
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+  }
+}
+"""
 PROCESS = None
 
+
+# ---
+# CONFIG GENERATION UTILS
+# ---
 
 def create_provider_config_file(provider_aliases=None):
     provider_aliases = provider_aliases or []
@@ -98,6 +121,9 @@ def create_provider_config_file(provider_aliases=None):
     # construct final config file content
     tf_config = "\n".join(provider_configs)
 
+    # create s3 backend config
+    tf_config += generate_s3_backend_config()
+
     # write temporary config file
     providers_file = get_providers_file_path()
     if os.path.exists(providers_file):
@@ -117,26 +143,61 @@ def get_providers_file_path() -> str:
     return os.path.join(base_dir, LS_PROVIDERS_FILE)
 
 
-def get_service_endpoint(service: str) -> str:
-    # allow configuring a custom endpoint via the environment
-    env_name = f"{service.replace('-', '_').upper().strip()}_ENDPOINT"
-    env_endpoint = os.environ.get(env_name, "").strip()
-    if env_endpoint:
-        if "://" not in env_endpoint:
-            env_endpoint = f"http://{env_endpoint}"
-        return env_endpoint
+def determine_provider_aliases() -> list:
+    """Return a list of providers (and aliases) configured in the *.tf files (if any)"""
+    result = []
+    tf_files = parse_tf_files()
+    for _file, obj in tf_files.items():
+        try:
+            providers = ensure_list(obj.get("provider", []))
+            aws_providers = [prov["aws"] for prov in providers if prov.get("aws")]
+            result.extend(aws_providers)
+        except Exception as e:
+            print(f"Warning: Unable to extract providers from {_file}:", e)
+    return result
 
-    # some services need specific hostnames
-    hostname = LOCALSTACK_HOSTNAME
-    if service == "s3":
-        hostname = S3_HOSTNAME
-    elif service == "mwaa":
-        hostname = f"mwaa.{LOCALHOST_HOSTNAME}"
 
-    return f"http://{hostname}:{EDGE_PORT}"
+def generate_s3_backend_config() -> str:
+    """Generate an S3 `backend {..}` block with local endpoints, if configured"""
+    backend_config = None
+    tf_files = parse_tf_files()
+    for obj in tf_files.values():
+        tf_configs = ensure_list(obj.get("terraform", []))
+        for tf_config in tf_configs:
+            backend_config = ensure_list(tf_config.get("backend"))
+            if backend_config:
+                backend_config = backend_config[0]
+                break
+    backend_config = backend_config and backend_config.get("s3")
+    if not backend_config:
+        return ""
 
+    configs = {
+        # note: default values, updated by `backend_config` further below...
+        "bucket": "tf-test-state",
+        "key": "terraform.tfstate",
+        "dynamodb_table": "tf-test-state",
+        "region": get_region(),
+        "s3_endpoint": get_service_endpoint("s3"),
+        "iam_endpoint": get_service_endpoint("iam"),
+        "sts_endpoint": get_service_endpoint("sts"),
+        "dynamodb_endpoint": get_service_endpoint("dynamodb"),
+    }
+    configs.update(backend_config)
+    get_or_create_bucket(configs["bucket"])
+    get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
+    result = TF_S3_BACKEND_CONFIG
+    for key, value in configs.items():
+        result = result.replace(f"<{key}>", value)
+    return result
+
+
+# ---
+# AWS CLIENT UTILS
+# ---
 
 def use_s3_path_style() -> bool:
+    """Whether to use S3 path addressing (depending on the configured S3 endpoint)"""
     regex = r"^[a-z]+://(localhost|[0-9.]+)(:[0-9]+)?$"
     return bool(re.match(regex, get_service_endpoint("s3")))
 
@@ -157,27 +218,74 @@ def get_region() -> str:
     return region or DEFAULT_REGION
 
 
-def to_bytes(obj) -> bytes:
-    return obj.encode("UTF-8") if isinstance(obj, str) else obj
+def get_service_endpoint(service: str) -> str:
+    """Get the service endpoint URL for the given service name"""
+    # allow configuring a custom endpoint via the environment
+    env_name = f"{service.replace('-', '_').upper().strip()}_ENDPOINT"
+    env_endpoint = os.environ.get(env_name, "").strip()
+    if env_endpoint:
+        if "://" not in env_endpoint:
+            env_endpoint = f"http://{env_endpoint}"
+        return env_endpoint
+
+    # some services need specific hostnames
+    hostname = LOCALSTACK_HOSTNAME
+    if service == "s3":
+        hostname = S3_HOSTNAME
+    elif service == "mwaa":
+        hostname = f"mwaa.{LOCALHOST_HOSTNAME}"
+
+    return f"http://{hostname}:{EDGE_PORT}"
 
 
-def to_str(obj) -> bytes:
-    return obj.decode("UTF-8") if isinstance(obj, bytes) else obj
+def connect_to_service(service: str, region: str = None):
+    import boto3
+    region = region or get_region()
+    return boto3.client(
+        service, endpoint_url=get_service_endpoint(service), region_name=region,
+        aws_access_key_id="test", aws_secret_access_key="test",
+    )
 
 
-def determine_provider_aliases() -> list:
-    """Return a list of providers (and aliases) configured in the *.tf files (if any)"""
-    result = []
+def get_or_create_bucket(bucket_name: str):
+    """Get or create a bucket in the current region."""
+    s3_client = connect_to_service("s3")
+    try:
+        return s3_client.head_bucket(Bucket=bucket_name)
+    except Exception:
+        region = s3_client.meta.region_name
+        kwargs = {}
+        if region != "us-east-1":
+            kwargs = {"CreateBucketConfiguration": {"LocationConstraint": region}}
+        return s3_client.create_bucket(Bucket=bucket_name, **kwargs)
+
+
+def get_or_create_ddb_table(table_name: str, region: str = None):
+    """Get or create a DynamoDB table with the given name."""
+    ddb_client = connect_to_service("dynamodb", region=region)
+    try:
+        return ddb_client.describe_table(TableName=table_name)
+    except Exception:
+        return ddb_client.create_table(
+            TableName=table_name, BillingMode="PAY_PER_REQUEST",
+            KeySchema=[{"AttributeName": "LockID", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "LockID", "AttributeType": "S"}]
+        )
+
+
+# ---
+# TF UTILS
+# ---
+
+def parse_tf_files() -> dict:
+    """Parse the local *.tf files and return a dict of <filename> -> <resource_dict>"""
+    result = {}
     for _file in glob.glob('*.tf'):
         try:
             with open(_file, 'r') as fp:
-                obj = hcl2.load(fp)
-            providers = obj.get("provider", [])
-            providers = [providers] if not isinstance(providers, list) else providers
-            aws_providers = [prov["aws"] for prov in providers if prov.get("aws")]
-            result.extend(aws_providers)
-        except Exception as e:
-            print(f"Warning: Unable to extract providers from {_file}:", e)
+                result[_file] = hcl2.load(fp)
+        except Exception:
+            pass
     return result
 
 
@@ -201,9 +309,29 @@ def run_tf_subprocess(cmd, env):
     sys.exit(PROCESS.returncode)
 
 
+# ---
+# UTIL FUNCTIONS
+# ---
+
 def signal_handler(sig, frame):
     PROCESS.send_signal(sig)
 
+
+def ensure_list(obj) -> list:
+    return obj if isinstance(obj, list) else [obj]
+
+
+def to_bytes(obj) -> bytes:
+    return obj.encode("UTF-8") if isinstance(obj, str) else obj
+
+
+def to_str(obj) -> bytes:
+    return obj.decode("UTF-8") if isinstance(obj, bytes) else obj
+
+
+# ---
+# MAIN ENTRYPOINT
+# ---
 
 def main():
     env = dict(os.environ)
