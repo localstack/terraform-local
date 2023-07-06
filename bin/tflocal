@@ -284,8 +284,8 @@ def parse_tf_files() -> dict:
         try:
             with open(_file, 'r') as fp:
                 result[_file] = hcl2.load(fp)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Unable to parse '{_file}' as HCL file: {e}")
     return result
 
 

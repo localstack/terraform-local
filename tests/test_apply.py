@@ -97,7 +97,8 @@ def test_s3_backend():
 
     # assert that S3 resource has been created
     s3 = client("s3")
-    s3.head_bucket(Bucket=bucket_name)
+    result = s3.head_bucket(Bucket=bucket_name)
+    assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
 ###
