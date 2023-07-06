@@ -188,6 +188,7 @@ def generate_s3_backend_config() -> str:
     get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     for key, value in configs.items():
+        value = str(value).lower() if isinstance(value, bool) else str(value)
         result = result.replace(f"<{key}>", value)
     return result
 
