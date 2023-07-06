@@ -75,6 +75,7 @@ def test_s3_backend():
         key    = "terraform.tfstate"
         dynamodb_table = "%s"
         region = "us-east-2"
+        skip_credentials_validation = true
       }
     }
     resource "aws_s3_bucket" "test-bucket" {
