@@ -37,6 +37,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.10: Add support for storing state files in local S3 backends
 * v0.9: Fix unsupported provider override for emrserverless
 * v0.8: Configure the endpoint for opensearch service
 * v0.7: Add initial support for provider aliases
