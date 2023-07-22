@@ -121,9 +121,7 @@ def create_provider_config_file(provider_aliases=None):
             region = region[0]
         additional_configs += [f' region = "{region}"']
         provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
-        provider_configs.append(provider_config) 
-
-    print("Using provider configs:", provider_configs)
+        provider_configs.append(provider_config)
 
     # construct final config file content
     tf_config = "\n".join(provider_configs)
