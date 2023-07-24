@@ -120,9 +120,14 @@ def create_provider_config_file(provider_aliases=None):
         additional_configs = []
         if use_s3_path_style():
             additional_configs += [" s3_use_path_style = true"]
-        if provider.get("alias"):
-            additional_configs += [f' alias = "{provider["alias"]}"']
+        alias = provider.get("alias")
+        if alias:
+            if isinstance(alias, list):
+                alias = alias[0]
+            additional_configs += [f' alias = "{alias}"']
         region = provider.get("region") or get_region()
+        if isinstance(region, list):
+            region = region[0]
         additional_configs += [f' region = "{region}"']
         provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
         provider_configs.append(provider_config)
