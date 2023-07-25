@@ -1,3 +1,5 @@
+[![Build status](https://github.com/localstack/terraform-local/actions/workflows/build.yml/badge.svg)](https://github.com/localstack/terraform-local/actions)
+
 # `tflocal` - Terraform with LocalStack
 
 This package provides `tflocal` - a small wrapper script to run [Terraform](https://terraform.io) against [LocalStack](https://localstack.cloud).
@@ -37,6 +39,8 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.12: Fix local endpoint overrides for Terraform AWS provider 5.9.0; fix parsing of alias and region defined as value lists
+* v0.11: Minor fix to handle boolean values in S3 backend configs
 * v0.10: Add support for storing state files in local S3 backends
 * v0.9: Fix unsupported provider override for emrserverless
 * v0.8: Configure the endpoint for opensearch service
