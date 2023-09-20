@@ -10,10 +10,11 @@ your TF config.
 """
 
 import os
-import re
 import sys
 import glob
 import subprocess
+
+from urllib.parse import urlparse
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 if os.path.isdir(os.path.join(PARENT_FOLDER, '.venv')):
@@ -212,9 +213,18 @@ def generate_s3_backend_config() -> str:
 # ---
 
 def use_s3_path_style() -> bool:
-    """Whether to use S3 path addressing (depending on the configured S3 endpoint)"""
-    regex = r"^[a-z]+://(localhost|[0-9.]+)(:[0-9]+)?$"
-    return bool(re.match(regex, get_service_endpoint("s3")))
+    """
+    Whether to use S3 path addressing (depending on the configured S3 endpoint)
+    If the endpoint starts with the `s3.` prefix, LocalStack will recognize virtual host addressing. If the endpoint
+    does not start with it, use path style. This also allows overriding the endpoint to always use path style in case of
+    inter container communications in Docker.
+    """
+    try:
+        host = urlparse(get_service_endpoint("s3")).hostname
+    except ValueError:
+        host = ""
+
+    return not host.startswith("s3.")
 
 
 def get_region() -> str:

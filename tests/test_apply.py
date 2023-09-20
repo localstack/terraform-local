@@ -34,6 +34,16 @@ def test_use_s3_path_style(monkeypatch):
     import_cli_code()
     assert use_s3_path_style()  # noqa
 
+    # test the case where the S3_HOSTNAME could be a Docker container name
+    monkeypatch.setenv("S3_HOSTNAME", "localstack")
+    import_cli_code()
+    assert use_s3_path_style()  # noqa
+
+    # test the case where the S3_HOSTNAME could be an arbitrary host starting with `s3.`
+    monkeypatch.setenv("S3_HOSTNAME", "s3.internal.host")
+    import_cli_code()
+    assert not use_s3_path_style()  # noqa
+
 
 def test_provider_aliases(monkeypatch):
     queue_name1 = f"q{short_uid()}"
