@@ -39,6 +39,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.13: Fix S3 automatic `use_s3_path_style` detection when setting S3_HOSTNAME or LOCALSTACK_HOSTNAME
 * v0.12: Fix local endpoint overrides for Terraform AWS provider 5.9.0; fix parsing of alias and region defined as value lists
 * v0.11: Minor fix to handle boolean values in S3 backend configs
 * v0.10: Add support for storing state files in local S3 backends
