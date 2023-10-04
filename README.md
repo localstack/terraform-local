@@ -31,6 +31,8 @@ The following environment variables can be configured:
 * `USE_EXEC`: whether to use `os.exec` instead of `subprocess.Popen` (try using this in case of I/O issues)
 * `<SERVICE>_ENDPOINT`: setting a custom service endpoint, e.g., `COGNITO_IDP_ENDPOINT=http://example.com`
 * `AWS_DEFAULT_REGION`: the AWS region to use (default: `us-east-1`, or determined from local credentials if `boto3` is installed)
+* `CUSTOMISE_ACCESS_KEY`: enables to override the static AWS Access Key ID
+* `AWS_ACCESS_KEY_ID`: the AWS Access Key ID to use for multi account setups, (default: `test`, or determined from local credentials if `CUSTOMISE_ACCESS_KEY=1`, `boto3` is installed and credentials are set, if either of the `AWS_PROFILE` or `AWS_DEFAULT_PROFILE` variables set, it uses the respective profile, default is `default`)
 
 ## Usage
 
@@ -39,6 +41,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.14: Add support to multi-account environments
 * v0.13: Fix S3 automatic `use_s3_path_style` detection when setting S3_HOSTNAME or LOCALSTACK_HOSTNAME
 * v0.12: Fix local endpoint overrides for Terraform AWS provider 5.9.0; fix parsing of alias and region defined as value lists
 * v0.11: Minor fix to handle boolean values in S3 backend configs
