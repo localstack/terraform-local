@@ -122,7 +122,7 @@ def create_provider_config_file(provider_aliases=None):
         provider_config = TF_PROVIDER_CONFIG.replace("<endpoints>", endpoints)
         provider_config = provider_config.replace(
             "<access_key>",
-            get_access_key() if CUSTOMISE_ACCESS_KEY else DEFAULT_ACCESS_KEY
+            get_access_key(provider) if CUSTOMISE_ACCESS_KEY else DEFAULT_ACCESS_KEY
         )
         additional_configs = []
         if use_s3_path_style():
@@ -248,21 +248,28 @@ def get_region() -> str:
     # fall back to default region
     return region or DEFAULT_REGION
 
-def get_access_key() -> str:
-    profile = str(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE") or "default").strip()
-    access_key = str(os.environ.get("AWS_ACCESS_KEY_ID") or "").strip()
-    if access_key:
-        return access_key
+
+def get_access_key(provider=None) -> str:
+    access_key = str(os.environ.get("AWS_ACCESS_KEY_ID") or provider.get("access_key", "")).strip()
+    if access_key and access_key != DEFAULT_ACCESS_KEY:
+        # Change live access key to mocked one
+        return deactivate_access_key(access_key)
     try:
         # If boto3 is installed, try to get the access_key from local credentials.
         # Note that boto3 is currently not included in the dependencies, to
         # keep the library lightweight.
         import boto3
+        profile = str(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE", "default")).strip()
         access_key = boto3.session.Session(profile_name=profile).get_credentials().access_key
     except Exception:
         pass
     # fall back to default region
-    return access_key or DEFAULT_ACCESS_KEY
+    return deactivate_access_key(access_key or DEFAULT_ACCESS_KEY)
+
+
+def deactivate_access_key(access_key) -> str:
+    return "L" + access_key[1:] if access_key[0] == "A" else access_key
+
 
 def get_service_endpoint(service: str) -> str:
     """Get the service endpoint URL for the given service name"""
