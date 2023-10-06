@@ -136,6 +136,7 @@ def create_provider_config_file(provider_aliases=None):
         if isinstance(region, list):
             region = region[0]
         additional_configs += [f' region = "{region}"']
+        additional_configs += [generate_additional_configs(filter_configs(provider))]
         provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
         provider_configs.append(provider_config)
 
@@ -211,6 +212,42 @@ def generate_s3_backend_config() -> str:
     for key, value in configs.items():
         value = str(value).lower() if isinstance(value, bool) else str(value)
         result = result.replace(f"<{key}>", value)
+    return result
+
+
+def filter_configs(configs: dict) -> dict:
+    return dict(filter(
+        lambda item: item[0] not in ("access_key", "secret_key", "alias", "region"),
+        configs.items()
+    ))
+
+
+def generate_additional_configs(configs, indent=1) -> str:
+    result = ""
+    for argument, value in configs.items():
+        if isinstance(value, str) and not check_tf_string(value):
+            value = f'"{value}"'
+
+        if isinstance(value, list):
+            try:
+                if isinstance(value[0], dict):
+                    # Unwrapping dicts as hlc2 for config blocks creating a list
+                    # with a single dict element
+                    value = value[0]
+                else:
+                    value = repr(value).replace("'", '"')
+            except IndexError:
+                value = "[]"
+
+        if isinstance(value, dict):
+            result = "\n".join([
+                result,
+                f"{indent * ' '}{argument} {{",
+                f"{generate_additional_configs(value,indent + 1)}",
+                f"{indent * ' '}}}",
+            ])
+        else:
+            result = "\n".join([result, f"{indent * ' '}{argument} = {value}"])
     return result
 
 
@@ -361,6 +398,15 @@ def run_tf_subprocess(cmd, env):
     PROCESS.communicate()
     sys.exit(PROCESS.returncode)
 
+def check_tf_string (expr: str) -> bool:
+    tf_prefixes = ("var.", "data.", "local.", "module.", "output.")
+    if expr in ("true","false"):
+        return True
+    if expr.startswith(tf_prefixes):
+        return True
+    if "(" in expr:
+        return True
+    return False
 
 # ---
 # UTIL FUNCTIONS
