@@ -31,8 +31,14 @@ The following environment variables can be configured:
 * `USE_EXEC`: whether to use `os.exec` instead of `subprocess.Popen` (try using this in case of I/O issues)
 * `<SERVICE>_ENDPOINT`: setting a custom service endpoint, e.g., `COGNITO_IDP_ENDPOINT=http://example.com`
 * `AWS_DEFAULT_REGION`: the AWS region to use (default: `us-east-1`, or determined from local credentials if `boto3` is installed)
-* `CUSTOMISE_ACCESS_KEY`: enables to override the static AWS Access Key ID
-* `AWS_ACCESS_KEY_ID`: the AWS Access Key ID to use for multi account setups, (default: `test`, or determined from local credentials if `CUSTOMISE_ACCESS_KEY=1`, `boto3` is installed and credentials are set, if either of the `AWS_PROFILE` or `AWS_DEFAULT_PROFILE` variables set, it uses the respective profile, default is `default`)
+* `CUSTOMISE_ACCESS_KEY`: enables to override the static AWS Access Key ID. The following cases are taking precedence over each other from top to bottom:
+    * `AWS_ACCESS_KEY_ID` environment variable is set
+    * `access_key` is set in the Terraform AWS provider
+    * `AWS_PROFILE` environment variable is set and configured
+    * `AWS_DEFAULT_PROFILE` environment variable is set and configured
+    * `default` profile's credentials are configured
+    * falls back to the default `AWS_ACCESS_KEY_ID` mock value
+* `AWS_ACCESS_KEY_ID`: AWS Access Key ID to use for multi account setups (default: `test` -> account ID: `000000000000`)
 
 ## Usage
 
