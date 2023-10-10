@@ -45,9 +45,6 @@ The following environment variables can be configured:
 The `tflocal` command has the same usage as the `terraform` command. For detailed usage,
 please refer to the man pages of `terraform --help`.
 
-## TODO
-- [ ] Sync region and access key override behavior
-
 ## Change Log
 
 * v0.14: Add support to multi-account environments

@@ -39,7 +39,6 @@ def test_access_key_override_fallback(monkeypatch):
     assert bucket_name not in s3_bucket_names
 
 
-# @pytest.mark.skip()
 def test_access_key_override_by_env_var(monkeypatch):
     monkeypatch.setenv("CUSTOMISE_ACCESS_KEY", "1")
     access_key = f"{mock_access_key()}"
