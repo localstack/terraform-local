@@ -14,9 +14,9 @@ LOCALSTACK_ENDPOINT = "http://localhost:4566"
 
 
 def test_access_key_override_fallback(monkeypatch):
-    access_key = f"{mock_access_key()}"
+    access_key = mock_access_key()
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", access_key)
-    bucket_name = f"{short_uid()}"
+    bucket_name = short_uid()
     config = """
     provider "aws" {
       region = "eu-west-1"
@@ -40,10 +40,10 @@ def test_access_key_override_fallback(monkeypatch):
 
 
 def test_access_key_override_by_env_var(monkeypatch):
-    monkeypatch.setenv("CUSTOMISE_ACCESS_KEY", "1")
-    access_key = f"{mock_access_key()}"
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
+    access_key = mock_access_key()
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", access_key)
-    bucket_name = f"{short_uid()}"
+    bucket_name = short_uid()
     config = """
     provider "aws" {
       region = "eu-west-1"
@@ -67,11 +67,11 @@ def test_access_key_override_by_env_var(monkeypatch):
 
 
 def test_access_key_override_by_profile(monkeypatch):
-    profile_name = f"{short_uid()}"
-    monkeypatch.setenv("CUSTOMISE_ACCESS_KEY", "1")
+    profile_name = short_uid()
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
     monkeypatch.setenv("AWS_PROFILE", profile_name)
-    access_key = f"{mock_access_key()}"
-    bucket_name = f"{short_uid()}"
+    access_key = mock_access_key()
+    bucket_name = short_uid()
     credentials = """
     [%s]
     aws_access_key_id = %s
@@ -109,9 +109,9 @@ def test_access_key_override_by_profile(monkeypatch):
 
 
 def test_access_key_override_by_default_profile(monkeypatch):
-    monkeypatch.setenv("CUSTOMISE_ACCESS_KEY", "1")
-    access_key = f"{mock_access_key()}"
-    bucket_name = f"{short_uid()}"
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
+    access_key = mock_access_key()
+    bucket_name = short_uid()
     credentials = """
     [default]
     aws_access_key_id = %s
@@ -148,9 +148,9 @@ def test_access_key_override_by_default_profile(monkeypatch):
 
 
 def test_access_key_override_by_provider(monkeypatch):
-    monkeypatch.setenv("CUSTOMISE_ACCESS_KEY", "1")
-    access_key = f"{mock_access_key()}"
-    bucket_name = f"{short_uid()}"
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
+    access_key = mock_access_key()
+    bucket_name = short_uid()
     config = """
     provider "aws" {
       access_key = "%s"

@@ -31,7 +31,7 @@ The following environment variables can be configured:
 * `USE_EXEC`: whether to use `os.exec` instead of `subprocess.Popen` (try using this in case of I/O issues)
 * `<SERVICE>_ENDPOINT`: setting a custom service endpoint, e.g., `COGNITO_IDP_ENDPOINT=http://example.com`
 * `AWS_DEFAULT_REGION`: the AWS region to use (default: `us-east-1`, or determined from local credentials if `boto3` is installed)
-* `CUSTOMISE_ACCESS_KEY`: enables to override the static AWS Access Key ID. The following cases are taking precedence over each other from top to bottom:
+* `CUSTOMIZE_ACCESS_KEY`: enables to override the static AWS Access Key ID. The following cases are taking precedence over each other from top to bottom:
     * `AWS_ACCESS_KEY_ID` environment variable is set
     * `access_key` is set in the Terraform AWS provider
     * `AWS_PROFILE` environment variable is set and configured
