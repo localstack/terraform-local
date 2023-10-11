@@ -3,7 +3,7 @@ import random
 import subprocess
 import tempfile
 import uuid
-from typing import Dict
+from typing import Dict, Generator
 
 import boto3
 import pytest
@@ -38,8 +38,17 @@ def test_customize_access_key_feature_flag(monkeypatch, customize_access_key: bo
         assert bucket_name not in s3_bucket_names_specific_account
 
 
-@pytest.mark.parametrize("profile_name", ["test", "default"])
-def test_access_key_override_by_profile(monkeypatch, profile_name):
+def _profile_names() -> Generator:
+    yield short_uid()
+    yield "default"
+
+
+def _generate_test_name(param: str) -> str:
+    return "random" if param != "default" else param
+
+
+@pytest.mark.parametrize("profile_name", _profile_names(), ids=_generate_test_name)
+def test_access_key_override_by_profile(monkeypatch, profile_name: str):
     monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
     access_key = mock_access_key()
     bucket_name = short_uid()
@@ -207,15 +216,15 @@ def get_bucket_names(**kwargs: dict) -> list:
 
 
 def create_test_bucket(bucket_name: str, access_key: str = None) -> None:
+    access_key_section = f'access_key = "{access_key}"' if access_key else ""
     config = """
     provider "aws" {
+      %s
       region = "eu-west-1"
     }
     resource "aws_s3_bucket" "test_bucket" {
       bucket = "%s"
-    }""" % (bucket_name)
-    if access_key:
-        config = config.replace("{\n", f'{{\n      access_key = "{access_key}"\n', 1)
+    }""" % (access_key_section, bucket_name)
     deploy_tf_script(config)
 
 
