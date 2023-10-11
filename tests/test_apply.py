@@ -6,6 +6,7 @@ import uuid
 from typing import Dict
 
 import boto3
+import pytest
 
 THIS_PATH = os.path.abspath(os.path.dirname(__file__))
 ROOT_PATH = os.path.join(THIS_PATH, "..")
@@ -13,63 +14,33 @@ TFLOCAL_BIN = os.path.join(ROOT_PATH, "bin", "tflocal")
 LOCALSTACK_ENDPOINT = "http://localhost:4566"
 
 
-def test_access_key_override_fallback(monkeypatch):
+@pytest.mark.parametrize("customize_access_key", [True, False])
+def test_customize_access_key_feature_flag(monkeypatch, customize_access_key: bool):
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", str(customize_access_key))
+
+    # create buckets in multiple accounts
     access_key = mock_access_key()
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", access_key)
     bucket_name = short_uid()
-    config = """
-    provider "aws" {
-      region = "eu-west-1"
-    }
-    resource "aws_s3_bucket" "test_bucket" {
-      bucket = "%s"
-    }""" % (bucket_name)
-    deploy_tf_script(config)
 
-    s3 = client("s3", region_name="eu-west-1")
-    s3_buckets = s3.list_buckets().get("Buckets")
-    s3_bucket_names = [s["Name"] for s in s3_buckets]
+    create_test_bucket(bucket_name)
 
-    assert bucket_name in s3_bucket_names
+    s3_bucket_names_default_account = get_bucket_names()
+    s3_bucket_names_specific_account = get_bucket_names(aws_access_key_id=access_key)
 
-    s3 = client("s3", region_name="eu-west-1", aws_access_key_id=access_key)
-    s3_buckets = s3.list_buckets().get("Buckets")
-    s3_bucket_names = [s["Name"] for s in s3_buckets]
-
-    assert bucket_name not in s3_bucket_names
+    if customize_access_key:
+        # if CUSTOMISE_ACCESS_KEY is enabled, the bucket name is only in the specific account
+        assert bucket_name not in s3_bucket_names_default_account
+        assert bucket_name in s3_bucket_names_specific_account
+    else:
+        # if CUSTOMISE_ACCESS_KEY is disabled, the bucket name is only in the default account
+        assert bucket_name in s3_bucket_names_default_account
+        assert bucket_name not in s3_bucket_names_specific_account
 
 
-def test_access_key_override_by_env_var(monkeypatch):
+@pytest.mark.parametrize("profile_name", ["test", "default"])
+def test_access_key_override_by_profile(monkeypatch, profile_name):
     monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
-    access_key = mock_access_key()
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", access_key)
-    bucket_name = short_uid()
-    config = """
-    provider "aws" {
-      region = "eu-west-1"
-    }
-    resource "aws_s3_bucket" "test_bucket" {
-      bucket = "%s"
-    }""" % (bucket_name)
-    deploy_tf_script(config)
-
-    s3 = client("s3", region_name="eu-west-1")
-    s3_buckets = s3.list_buckets().get("Buckets")
-    s3_bucket_names = [s["Name"] for s in s3_buckets]
-
-    assert bucket_name not in s3_bucket_names
-
-    s3 = client("s3", region_name="eu-west-1", aws_access_key_id=access_key)
-    s3_buckets = s3.list_buckets().get("Buckets")
-    s3_bucket_names = [s["Name"] for s in s3_buckets]
-
-    assert bucket_name in s3_bucket_names
-
-
-def test_access_key_override_by_profile(monkeypatch):
-    profile_name = short_uid()
-    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
-    monkeypatch.setenv("AWS_PROFILE", profile_name)
     access_key = mock_access_key()
     bucket_name = short_uid()
     credentials = """
@@ -83,95 +54,34 @@ def test_access_key_override_by_profile(monkeypatch):
         with open(credentials_file, "w") as f:
             f.write(credentials)
 
+        if profile_name != "default":
+            monkeypatch.setenv("AWS_PROFILE", profile_name)
         monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", credentials_file)
 
-        config = """
-        provider "aws" {
-          region = "eu-west-1"
-        }
-        resource "aws_s3_bucket" "test_bucket" {
-          bucket = "%s"
-        }""" % (bucket_name)
-        deploy_tf_script(config)
+        create_test_bucket(bucket_name)
 
-        s3 = client("s3", region_name="eu-west-1")
-        s3_buckets = s3.list_buckets().get("Buckets")
-        s3_bucket_names = [s["Name"] for s in s3_buckets]
+        extra_param = {"aws_access_key_id": None, "aws_secret_access_key": None} if profile_name == "default" else {}
+        s3_bucket_names_specific_profile = get_bucket_names(**extra_param)
 
-        assert bucket_name in s3_bucket_names
+        monkeypatch.delenv("AWS_PROFILE", raising=False)
 
-        monkeypatch.delenv("AWS_PROFILE")
-        s3 = client("s3", region_name="eu-west-1")
-        s3_buckets = s3.list_buckets().get("Buckets")
-        s3_bucket_names = [s["Name"] for s in s3_buckets]
+        s3_bucket_names_default_account = get_bucket_names()
 
-        assert bucket_name not in s3_bucket_names
-
-
-def test_access_key_override_by_default_profile(monkeypatch):
-    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
-    access_key = mock_access_key()
-    bucket_name = short_uid()
-    credentials = """
-    [default]
-    aws_access_key_id = %s
-    aws_secret_access_key = test
-    region = eu-west-1
-    """ % (access_key)
-    with tempfile.TemporaryDirectory() as temp_dir:
-        credentials_file = os.path.join(temp_dir, "credentials")
-        with open(credentials_file, "w") as f:
-            f.write(credentials)
-
-        monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", credentials_file)
-
-        config = """
-        provider "aws" {
-          region = "eu-west-1"
-        }
-        resource "aws_s3_bucket" "test_bucket" {
-          bucket = "%s"
-        }""" % (bucket_name)
-        deploy_tf_script(config)
-
-        s3 = client("s3", region_name="eu-west-1")
-        s3_buckets = s3.list_buckets().get("Buckets")
-        s3_bucket_names = [s["Name"] for s in s3_buckets]
-
-        assert bucket_name not in s3_bucket_names
-
-        s3 = client("s3", region_name="eu-west-1", aws_access_key_id=None, aws_secret_access_key=None)
-        s3_buckets = s3.list_buckets().get("Buckets")
-        s3_bucket_names = [s["Name"] for s in s3_buckets]
-
-        assert bucket_name in s3_bucket_names
+        assert bucket_name in s3_bucket_names_specific_profile
+        assert bucket_name not in s3_bucket_names_default_account
 
 
 def test_access_key_override_by_provider(monkeypatch):
     monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
     access_key = mock_access_key()
     bucket_name = short_uid()
-    config = """
-    provider "aws" {
-      access_key = "%s"
-      region = "eu-west-1"
-    }
-    resource "aws_s3_bucket" "test_bucket" {
-      bucket = "%s"
-    }""" % (access_key, bucket_name)
-    deploy_tf_script(config)
+    create_test_bucket(bucket_name, access_key)
 
-    s3 = client("s3", region_name="eu-west-1")
-    s3_buckets = s3.list_buckets().get("Buckets")
-    s3_bucket_names = [s["Name"] for s in s3_buckets]
+    s3_bucket_names_default_account = get_bucket_names()
+    s3_bucket_names_specific_account = get_bucket_names(aws_access_key_id=access_key)
 
-    assert bucket_name not in s3_bucket_names
-
-    s3 = client("s3", region_name="eu-west-1", aws_access_key_id=access_key)
-    s3_buckets = s3.list_buckets().get("Buckets")
-    s3_bucket_names = [s["Name"] for s in s3_buckets]
-
-    assert bucket_name in s3_bucket_names
+    assert bucket_name not in s3_bucket_names_default_account
+    assert bucket_name in s3_bucket_names_specific_account
 
 
 def test_s3_path_addressing():
@@ -288,6 +198,25 @@ def deploy_tf_script(script: str, env_vars: Dict[str, str] = None):
         run([TFLOCAL_BIN, "init"], **kwargs)
         out = run([TFLOCAL_BIN, "apply", "-auto-approve"], **kwargs)
         return out
+
+
+def get_bucket_names(**kwargs: dict) -> list:
+    s3 = client("s3", region_name="eu-west-1", **kwargs)
+    s3_buckets = s3.list_buckets().get("Buckets")
+    return [s["Name"] for s in s3_buckets]
+
+
+def create_test_bucket(bucket_name: str, access_key: str = None) -> None:
+    config = """
+    provider "aws" {
+      region = "eu-west-1"
+    }
+    resource "aws_s3_bucket" "test_bucket" {
+      bucket = "%s"
+    }""" % (bucket_name)
+    if access_key:
+        config = config.replace("{\n", f'{{\n      access_key = "{access_key}"\n', 1)
+    deploy_tf_script(config)
 
 
 def short_uid() -> str:
