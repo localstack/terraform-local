@@ -1,14 +1,96 @@
-import tempfile
 import os
-import boto3
-import uuid
+import random
 import subprocess
-from typing import Dict
+import tempfile
+import uuid
+from typing import Dict, Generator
+
+import boto3
+import pytest
 
 THIS_PATH = os.path.abspath(os.path.dirname(__file__))
 ROOT_PATH = os.path.join(THIS_PATH, "..")
 TFLOCAL_BIN = os.path.join(ROOT_PATH, "bin", "tflocal")
 LOCALSTACK_ENDPOINT = "http://localhost:4566"
+
+
+@pytest.mark.parametrize("customize_access_key", [True, False])
+def test_customize_access_key_feature_flag(monkeypatch, customize_access_key: bool):
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", str(customize_access_key))
+
+    # create buckets in multiple accounts
+    access_key = mock_access_key()
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", access_key)
+    bucket_name = short_uid()
+
+    create_test_bucket(bucket_name)
+
+    s3_bucket_names_default_account = get_bucket_names()
+    s3_bucket_names_specific_account = get_bucket_names(aws_access_key_id=access_key)
+
+    if customize_access_key:
+        # if CUSTOMISE_ACCESS_KEY is enabled, the bucket name is only in the specific account
+        assert bucket_name not in s3_bucket_names_default_account
+        assert bucket_name in s3_bucket_names_specific_account
+    else:
+        # if CUSTOMISE_ACCESS_KEY is disabled, the bucket name is only in the default account
+        assert bucket_name in s3_bucket_names_default_account
+        assert bucket_name not in s3_bucket_names_specific_account
+
+
+def _profile_names() -> Generator:
+    yield short_uid()
+    yield "default"
+
+
+def _generate_test_name(param: str) -> str:
+    return "random" if param != "default" else param
+
+
+@pytest.mark.parametrize("profile_name", _profile_names(), ids=_generate_test_name)
+def test_access_key_override_by_profile(monkeypatch, profile_name: str):
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
+    access_key = mock_access_key()
+    bucket_name = short_uid()
+    credentials = """
+    [%s]
+    aws_access_key_id = %s
+    aws_secret_access_key = test
+    region = eu-west-1
+    """ % (profile_name, access_key)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        credentials_file = os.path.join(temp_dir, "credentials")
+        with open(credentials_file, "w") as f:
+            f.write(credentials)
+
+        if profile_name != "default":
+            monkeypatch.setenv("AWS_PROFILE", profile_name)
+        monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", credentials_file)
+
+        create_test_bucket(bucket_name)
+
+        extra_param = {"aws_access_key_id": None, "aws_secret_access_key": None} if profile_name == "default" else {}
+        s3_bucket_names_specific_profile = get_bucket_names(**extra_param)
+
+        monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+        s3_bucket_names_default_account = get_bucket_names()
+
+        assert bucket_name in s3_bucket_names_specific_profile
+        assert bucket_name not in s3_bucket_names_default_account
+
+
+def test_access_key_override_by_provider(monkeypatch):
+    monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
+    access_key = mock_access_key()
+    bucket_name = short_uid()
+    create_test_bucket(bucket_name, access_key)
+
+    s3_bucket_names_default_account = get_bucket_names()
+    s3_bucket_names_specific_account = get_bucket_names(aws_access_key_id=access_key)
+
+    assert bucket_name not in s3_bucket_names_default_account
+    assert bucket_name in s3_bucket_names_specific_account
 
 
 def test_s3_path_addressing():
@@ -45,7 +127,7 @@ def test_use_s3_path_style(monkeypatch):
     assert not use_s3_path_style()  # noqa
 
 
-def test_provider_aliases(monkeypatch):
+def test_provider_aliases():
     queue_name1 = f"q{short_uid()}"
     queue_name2 = f"q{short_uid()}"
     config = """
@@ -127,15 +209,43 @@ def deploy_tf_script(script: str, env_vars: Dict[str, str] = None):
         return out
 
 
+def get_bucket_names(**kwargs: dict) -> list:
+    s3 = client("s3", region_name="eu-west-1", **kwargs)
+    s3_buckets = s3.list_buckets().get("Buckets")
+    return [s["Name"] for s in s3_buckets]
+
+
+def create_test_bucket(bucket_name: str, access_key: str = None) -> None:
+    access_key_section = f'access_key = "{access_key}"' if access_key else ""
+    config = """
+    provider "aws" {
+      %s
+      region = "eu-west-1"
+    }
+    resource "aws_s3_bucket" "test_bucket" {
+      bucket = "%s"
+    }""" % (access_key_section, bucket_name)
+    deploy_tf_script(config)
+
+
 def short_uid() -> str:
     return str(uuid.uuid4())[0:8]
 
 
+def mock_access_key() -> str:
+    return str(random.randrange(999999999999)).zfill(12)
+
+
 def client(service: str, **kwargs):
+    # if aws access key is not set AND no profile is in the environment,
+    # we want to set the accesss key and the secret key to test
+    if "aws_access_key_id" not in kwargs and "AWS_PROFILE" not in os.environ:
+        kwargs["aws_access_key_id"] = "test"
+    if "aws_access_key_id" in kwargs and "aws_secret_access_key" not in kwargs:
+        kwargs["aws_secret_access_key"] = "test"
+    boto3.setup_default_session()
     return boto3.client(
         service,
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
         endpoint_url=LOCALSTACK_ENDPOINT,
         **kwargs,
     )
