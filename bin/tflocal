@@ -76,6 +76,7 @@ def create_provider_config_file(provider_aliases=None):
 
     # maps services to be replaced with alternative names
     service_replaces = {
+        "appconfigdata": "",
         "apigatewaymanagementapi": "",
         "ce": "costexplorer",
         "edge": "",
