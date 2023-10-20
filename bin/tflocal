@@ -83,6 +83,7 @@ def create_provider_config_file(provider_aliases=None):
         "ce": "costexplorer",
         "dynamodbstreams": "",
         "edge": "",
+        "emrserverless": "",
         "iotdata": "",
         "ioteventsdata": "",
         "iotjobsdata": "",

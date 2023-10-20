@@ -47,7 +47,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
-* v0.15: Update endpoint overrides
+* v0.15: Update endpoint overrides for Terraform AWS provider 5.22.0
 * v0.14: Add support to multi-account environments
 * v0.13: Fix S3 automatic `use_s3_path_style` detection when setting S3_HOSTNAME or LOCALSTACK_HOSTNAME
 * v0.12: Fix local endpoint overrides for Terraform AWS provider 5.9.0; fix parsing of alias and region defined as value lists
