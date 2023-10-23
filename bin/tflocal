@@ -75,23 +75,26 @@ def create_provider_config_file(provider_aliases=None):
     provider_aliases = provider_aliases or []
 
     # maps services to be replaced with alternative names
+    # skip services which do not have equivalent endpoint overrides
+    # see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints
     service_replaces = {
         "apigatewaymanagementapi": "",
+        "appconfigdata": "",
         "ce": "costexplorer",
+        "dynamodbstreams": "",
         "edge": "",
         "emrserverless": "",
         "iotdata": "",
-        "iotjobsdata": "",
-        "logs": "cloudwatchlogs",
-        "timestream": "",
-        "dynamodbstreams": "",
         "ioteventsdata": "",
+        "iotjobsdata": "",
         "iotwireless": "",
+        "logs": "cloudwatchlogs",
         "mediastoredata": "",
         "qldbsession": "",
         "rdsdata": "",
         "sagemakerruntime": "",
         "support": "",
+        "timestream": "",
         "timestreamquery": "",
     }
     # service names to be excluded (not yet available in TF)
