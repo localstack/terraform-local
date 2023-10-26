@@ -61,7 +61,7 @@ terraform {
     dynamodb_endpoint = "<dynamodb_endpoint>"
     skip_credentials_validation = true
     skip_metadata_api_check     = true
-    use_path_style              = <use_path_style>
+    force_path_style            = <force_path_style>
   }
 }
 """
@@ -207,7 +207,7 @@ def generate_s3_backend_config() -> str:
         "iam_endpoint": get_service_endpoint("iam"),
         "sts_endpoint": get_service_endpoint("sts"),
         "dynamodb_endpoint": get_service_endpoint("dynamodb"),
-        "use_path_style": bool(use_s3_path_style()),
+        "force_path_style": bool(use_s3_path_style()),
     }
     configs.update(backend_config)
     get_or_create_bucket(configs["bucket"])
