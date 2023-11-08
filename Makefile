@@ -19,9 +19,10 @@ test:         ## Run unit/integration tests
 
 publish:      ## Publish the library to the central PyPi repository
 	# build and upload archive
-	($(VENV_RUN) && pip install setuptools && ./setup.py sdist && twine upload dist/*)
+	($(VENV_RUN) && pip install setuptools twine && ./setup.py sdist && twine upload dist/*)
 
 clean:        ## Clean up
 	rm -rf $(VENV_DIR)
+	rm -rf dist/*
 
 .PHONY: clean publish install usage lint test
