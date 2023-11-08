@@ -295,6 +295,7 @@ def get_service_endpoint(service: str) -> str:
 
     return f"http://{hostname}:{EDGE_PORT}"
 
+
 def connect_to_service(service: str, region: str = None):
     import boto3
     region = region or get_region()
