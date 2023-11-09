@@ -52,12 +52,11 @@ def test_access_key_override_by_profile(monkeypatch, profile_name: str):
     monkeypatch.setenv("CUSTOMIZE_ACCESS_KEY", "1")
     access_key = mock_access_key()
     bucket_name = short_uid()
-    credentials = """
-    [%s]
-    aws_access_key_id = %s
-    aws_secret_access_key = test
-    region = eu-west-1
-    """ % (profile_name, access_key)
+    credentials = """[%s]
+aws_access_key_id = %s
+aws_secret_access_key = test
+region = eu-west-1
+""" % (profile_name, access_key)
     with tempfile.TemporaryDirectory() as temp_dir:
         credentials_file = os.path.join(temp_dir, "credentials")
         with open(credentials_file, "w") as f:
