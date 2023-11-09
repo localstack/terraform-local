@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_DEFAULT_REGION: us-east-1
+      DNS_ADDRESS: 127.0.0.1
 
     steps:
     - name: Check out code
