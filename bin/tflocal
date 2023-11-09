@@ -25,15 +25,15 @@ import hcl2  # noqa: E402
 
 DEFAULT_REGION = "us-east-1"
 DEFAULT_ACCESS_KEY = "test"
-AWS_ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL") or "http://localhost:4655"
+AWS_ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL")
 CUSTOMIZE_ACCESS_KEY = str(os.environ.get("CUSTOMIZE_ACCESS_KEY")).strip().lower() in ["1", "true"]
 LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
-LOCALSTACK_HOSTNAME = os.environ.get("LOCALSTACK_HOSTNAME") or urlparse(AWS_ENDPOINT_URL).hostname
-EDGE_PORT = int(os.environ.get("EDGE_PORT") or urlparse(AWS_ENDPOINT_URL).port)
+LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
+EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4655)
 TF_PROVIDER_CONFIG = """
 provider "aws" {
   access_key                  = "<access_key>"
