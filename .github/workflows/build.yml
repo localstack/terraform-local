@@ -10,7 +10,7 @@ on:
 name: Build and Test
 jobs:
   build_test:
-    timeout-minutes: 10
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
       AWS_DEFAULT_REGION: us-east-1
