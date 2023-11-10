@@ -279,7 +279,7 @@ def deactivate_access_key(access_key: str) -> str:
 def get_service_endpoint(service: str) -> str:
     """Get the service endpoint URL for the given service name"""
     # allow configuring a custom endpoint via the environment
-    env_name = f"{service.replace("-", "_").upper().strip()}_ENDPOINT"
+    env_name = f"{service.replace('-', '_').upper().strip()}_ENDPOINT"
     env_endpoint = os.environ.get(env_name, "").strip()
     if env_endpoint:
         if "://" not in env_endpoint:
