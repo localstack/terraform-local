@@ -25,8 +25,9 @@ pip install terraform-local
 
 The following environment variables can be configured:
 * `TF_CMD`: Terraform command to call (default: `terraform`)
-* `LOCALSTACK_HOSTNAME`: host name of the target LocalStack instance
-* `EDGE_PORT`: port number of the target LocalStack instance
+* `AWS_ENDPOINT_URL`: hostname and port of the target LocalStack instance
+* `LOCALSTACK_HOSTNAME`: __(Deprecated)__ host name of the target LocalStack instance
+* `EDGE_PORT`: __(Deprecated)__ port number of the target LocalStack instance
 * `S3_HOSTNAME`: special hostname to be used to connect to LocalStack S3 (default: `s3.localhost.localstack.cloud`)
 * `USE_EXEC`: whether to use `os.exec` instead of `subprocess.Popen` (try using this in case of I/O issues)
 * `<SERVICE>_ENDPOINT`: setting a custom service endpoint, e.g., `COGNITO_IDP_ENDPOINT=http://example.com`
@@ -47,6 +48,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.16.0: Introducing semantic versioning and AWS_ENDPOINT_URL variable
 * v0.15: Update endpoint overrides for Terraform AWS provider 5.22.0
 * v0.14: Add support to multi-account environments
 * v0.13: Fix S3 automatic `use_s3_path_style` detection when setting S3_HOSTNAME or LOCALSTACK_HOSTNAME

@@ -10,20 +10,21 @@ on:
 name: Build and Test
 jobs:
   build_test:
-    timeout-minutes: 10
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
       AWS_DEFAULT_REGION: us-east-1
+      DNS_ADDRESS: 127.0.0.1
 
     steps:
     - name: Check out code
       uses: actions/checkout@v3
     - name: Pull LocalStack Docker image
       run: docker pull localstack/localstack &
-    - name: Set up Python 3.10
+    - name: Set up Python 3.11
       uses: actions/setup-python@v2
       with:
-        python-version: '3.10.5'
+        python-version: '3.11'
     - name: Install dependencies
       run: make install
     - name: Run code linter
