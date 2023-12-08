@@ -48,6 +48,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.16.1: Update Setuptools to exclude tests during packaging
 * v0.16.0: Introducing semantic versioning and AWS_ENDPOINT_URL variable
 * v0.15: Update endpoint overrides for Terraform AWS provider 5.22.0
 * v0.14: Add support to multi-account environments
