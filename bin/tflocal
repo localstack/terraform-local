@@ -221,7 +221,7 @@ def generate_s3_backend_config() -> str:
         elif isinstance(value, dict):
             if key == "endpoints":
                 if TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5):
-                    value = f"{key} = {{\n" + "\n".join([ f"      {k} = {v}" for k, v in value.items() ]) + "\n    }"
+                    value = f"{key} = {{\n" + "\n".join([f"      {k} = {v}" for k, v in value.items()]) + "\n    }"
                 else:
                     value = f"""endpoint          = "{value["s3"]}"
     iam_endpoint      = "{value["iam"]}"
@@ -362,9 +362,10 @@ def parse_tf_files() -> dict:
             print(f'Unable to parse "{_file}" as HCL file: {e}')
     return result
 
+
 def get_tf_version(env):
     global TF_VERSION
-    output = subprocess.run(["terraform","version","-json"], env=env, check=True, capture_output=True).stdout.decode("utf-8")
+    output = subprocess.run(["terraform", "version", "-json"], env=env, check=True, capture_output=True).stdout.decode("utf-8")
     TF_VERSION = version.parse(json.loads(output)["terraform_version"])
 
 
@@ -420,7 +421,7 @@ def main():
         get_tf_version(env)
         if not TF_VERSION:
             raise ValueError
-    except(FileNotFoundError, ValueError):
+    except (FileNotFoundError, ValueError):
         print("Terraform not found.")
         exit(1)
 
