@@ -59,10 +59,7 @@ terraform {
 
     access_key        = "test"
     secret_key        = "test"
-    endpoint          = "<s3_endpoint>"
-    iam_endpoint      = "<iam_endpoint>"
-    sts_endpoint      = "<sts_endpoint>"
-    dynamodb_endpoint = "<dynamodb_endpoint>"
+    <endpoints>
     skip_credentials_validation = true
     skip_metadata_api_check     = true
   }
@@ -206,17 +203,32 @@ def generate_s3_backend_config() -> str:
         "key": "terraform.tfstate",
         "dynamodb_table": "tf-test-state",
         "region": get_region(),
-        "s3_endpoint": get_service_endpoint("s3"),
-        "iam_endpoint": get_service_endpoint("iam"),
-        "sts_endpoint": get_service_endpoint("sts"),
-        "dynamodb_endpoint": get_service_endpoint("dynamodb"),
+        "endpoints": {
+            "s3": get_service_endpoint("s3"),
+            "iam": get_service_endpoint("iam"),
+            "sts": get_service_endpoint("sts"),
+            "dynamodb": get_service_endpoint("dynamodb"),
+        },
     }
     configs.update(backend_config)
     get_or_create_bucket(configs["bucket"])
     get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     for key, value in configs.items():
-        value = str(value).lower() if isinstance(value, bool) else str(value)
+        if isinstance(value, bool):
+            value = str(value).lower()
+        elif isinstance(value, dict):
+            if key == "endpoints":
+                if TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5):
+                    value = f"{key} = {{\n" + "\n".join([ f"      {k} = {v}" for k, v in value.items() ]) + "\n    }"
+                else:
+                    value = f"""endpoint          = "{value["s3"]}"
+    iam_endpoint      = "{value["iam"]}"
+    sts_endpoint      = "{value["sts"]}"
+    dynamodb_endpoint = "{value["dynamodb"]}"
+"""
+        else:
+            value = str(value)
         result = result.replace(f"<{key}>", value)
     return result
 
