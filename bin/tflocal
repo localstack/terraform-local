@@ -206,6 +206,7 @@ def generate_s3_backend_config() -> str:
         "endpoints": {
             "s3": get_service_endpoint("s3"),
             "iam": get_service_endpoint("iam"),
+            "sso": get_service_endpoint("sso"),
             "sts": get_service_endpoint("sts"),
             "dynamodb": get_service_endpoint("dynamodb"),
         },
