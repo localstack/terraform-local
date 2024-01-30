@@ -23,6 +23,7 @@ publish:      ## Publish the library to the central PyPi repository
 
 clean:        ## Clean up
 	rm -rf $(VENV_DIR)
-	rm -rf dist/*
+	rm -rf dist
+	rm -rf *.egg-info
 
 .PHONY: clean publish install usage lint test
