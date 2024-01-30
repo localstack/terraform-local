@@ -221,7 +221,7 @@ def generate_s3_backend_config() -> str:
         elif isinstance(value, dict):
             if key == "endpoints":
                 if TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5):
-                    value = f"{key} = {{\n" + "\n".join([f"      {k} = {v}" for k, v in value.items()]) + "\n    }"
+                    value = f"{key} = {{\n" + "\n".join([f'      {k} = "{v}"' for k, v in value.items()]) + "\n    }"
                 else:
                     value = f"""endpoint          = "{value["s3"]}"
     iam_endpoint      = "{value["iam"]}"
