@@ -41,7 +41,7 @@ provider "aws" {
   skip_credentials_validation = true
   skip_metadata_api_check     = true
   <configs>
- endpoints {
+  endpoints {
 <endpoints>
  }
 }
@@ -126,7 +126,7 @@ def create_provider_config_file(provider_aliases=None):
             "<access_key>",
             get_access_key(provider) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
         )
-        endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
+        endpoints = "\n".join([f'    {s} = "{get_service_endpoint(s)}"' for s in services])
         provider_config = provider_config.replace("<endpoints>", endpoints)
         additional_configs = []
         if use_s3_path_style():
@@ -139,7 +139,7 @@ def create_provider_config_file(provider_aliases=None):
         region = provider.get("region") or get_region()
         if isinstance(region, list):
             region = region[0]
-        additional_configs += [f' region = "{region}"']
+        additional_configs += [f'region = "{region}"']
         provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
         provider_configs.append(provider_config)
 
