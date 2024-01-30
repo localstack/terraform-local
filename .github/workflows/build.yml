@@ -10,6 +10,9 @@ on:
 name: Build and Test
 jobs:
   build_test:
+    strategy:
+      matrix:
+        tf-version: ["1.5.7", "latest"]
     timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
@@ -17,6 +20,9 @@ jobs:
       DNS_ADDRESS: 127.0.0.1
 
     steps:
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ matrix.tf-version}}
     - name: Check out code
       uses: actions/checkout@v3
     - name: Pull LocalStack Docker image
