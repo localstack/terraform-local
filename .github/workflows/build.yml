@@ -33,6 +33,7 @@ jobs:
       if: ${{ matrix.tool == 'tofu' }}
       with:
         tofu_version: ${{matrix.version}}
+        tofu_wrapper: false
     - name: Check out code
       uses: actions/checkout@v3
     - name: Pull LocalStack Docker image
