@@ -230,7 +230,7 @@ def generate_s3_backend_config() -> str:
                         sts_endpoint      = "{value["sts"]}"
                         dynamodb_endpoint = "{value["dynamodb"]}"
                     """),
-                prefix=" " * 4)
+                    prefix=" " * 4)
             else:
                 value = textwrap.indent(
                     text=f"{key} = {{\n" + "\n".join([f'  {k} = "{v}"' for k, v in value.items()]) + "\n}",
