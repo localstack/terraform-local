@@ -365,7 +365,7 @@ def parse_tf_files() -> dict:
 
 def get_tf_version(env):
     global TF_VERSION
-    output = subprocess.run(["terraform", "version", "-json"], env=env, check=True, capture_output=True).stdout.decode("utf-8")
+    output = subprocess.run([f"{TF_CMD}", "version", "-json"], env=env, check=True, capture_output=True).stdout.decode("utf-8")
     TF_VERSION = version.parse(json.loads(output)["terraform_version"])
 
 
