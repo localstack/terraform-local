@@ -14,6 +14,7 @@ import sys
 import glob
 import subprocess
 import json
+import textwrap
 
 from packaging import version
 from urllib.parse import urlparse
@@ -219,15 +220,20 @@ def generate_s3_backend_config() -> str:
         if isinstance(value, bool):
             value = str(value).lower()
         elif isinstance(value, dict):
-            if key == "endpoints":
-                if TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5):
-                    value = f"{key} = {{\n" + "\n".join([f'      {k} = "{v}"' for k, v in value.items()]) + "\n    }"
-                else:
-                    value = f"""endpoint          = "{value["s3"]}"
-    iam_endpoint      = "{value["iam"]}"
-    sts_endpoint      = "{value["sts"]}"
-    dynamodb_endpoint = "{value["dynamodb"]}"
-"""
+            is_tf_legacy = not (TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5))
+            if key == "endpoints" and is_tf_legacy:
+                value = textwrap.indent(
+                    text=textwrap.dedent(f"""\
+                        endpoint          = "{value["s3"]}"
+                        iam_endpoint      = "{value["iam"]}"
+                        sts_endpoint      = "{value["sts"]}"
+                        dynamodb_endpoint = "{value["dynamodb"]}"
+                    """),
+                prefix=" " * 4)
+            else:
+                value = textwrap.indent(
+                    text=f"{key} = {{\n" + "\n".join([f'  {k} = "{v}"' for k, v in value.items()]) + "\n}",
+                    prefix=" " * 4)
         else:
             value = str(value)
         result = result.replace(f"<{key}>", value)
