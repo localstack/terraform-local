@@ -26,13 +26,13 @@ jobs:
 
     steps:
     - uses: hashicorp/setup-terraform@v3
+      if: ${{ matrix.tool == 'terraform' }}
       with:
-        terraform_version: ${{ matrix.version}}
-      if: ${{matrix.tool}} == 'terraform'
+        terraform_version: ${{matrix.version}}
     - uses: opentofu/setup-opentofu@v1
+      if: ${{ matrix.tool == 'tofu' }}
       with:
-        tofu_version: ${{ matrix.version}}
-      if: ${{matrix.tool}} == 'tofu'
+        tofu_version: ${{matrix.version}}
     - name: Check out code
       uses: actions/checkout@v3
     - name: Pull LocalStack Docker image
