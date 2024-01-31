@@ -61,7 +61,7 @@ terraform {
 
     access_key        = "test"
     secret_key        = "test"
-    <endpoints>
+<endpoints>
     skip_credentials_validation = true
     skip_metadata_api_check     = true
   }
@@ -428,8 +428,8 @@ def main():
         get_tf_version(env)
         if not TF_VERSION:
             raise ValueError
-    except (FileNotFoundError, ValueError):
-        print("Terraform not found.")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
     # create TF provider config file
