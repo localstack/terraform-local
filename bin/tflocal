@@ -18,6 +18,7 @@ import textwrap
 
 from packaging import version
 from urllib.parse import urlparse
+from typing import Optional
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
@@ -37,7 +38,7 @@ TF_CMD = os.environ.get("TF_CMD") or "terraform"
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
 LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
-TF_VERSION = None
+TF_VERSION: Optional[version.Version] = None
 TF_PROVIDER_CONFIG = """
 provider "aws" {
   access_key                  = "<access_key>"
