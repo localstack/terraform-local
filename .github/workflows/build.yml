@@ -10,13 +10,30 @@ on:
 name: Build and Test
 jobs:
   build_test:
+    strategy:
+      matrix:
+        version: ['1.5.7', 'latest']
+        tool: ['terraform', 'tofu']
+        exclude:
+          - tool: tofu
+            version: '1.5.7'
     timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
       AWS_DEFAULT_REGION: us-east-1
       DNS_ADDRESS: 127.0.0.1
+      TF_CMD: ${{matrix.tool}}
 
     steps:
+    - uses: hashicorp/setup-terraform@v3
+      if: ${{ matrix.tool == 'terraform' }}
+      with:
+        terraform_version: ${{matrix.version}}
+    - uses: opentofu/setup-opentofu@v1
+      if: ${{ matrix.tool == 'tofu' }}
+      with:
+        tofu_version: ${{matrix.version}}
+        tofu_wrapper: false
     - name: Check out code
       uses: actions/checkout@v3
     - name: Pull LocalStack Docker image

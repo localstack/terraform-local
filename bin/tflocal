@@ -13,8 +13,12 @@ import os
 import sys
 import glob
 import subprocess
+import json
+import textwrap
 
+from packaging import version
 from urllib.parse import urlparse
+from typing import Optional
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
@@ -34,6 +38,7 @@ TF_CMD = os.environ.get("TF_CMD") or "terraform"
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
 LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
+TF_VERSION: Optional[version.Version] = None
 TF_PROVIDER_CONFIG = """
 provider "aws" {
   access_key                  = "<access_key>"
@@ -41,7 +46,7 @@ provider "aws" {
   skip_credentials_validation = true
   skip_metadata_api_check     = true
   <configs>
- endpoints {
+  endpoints {
 <endpoints>
  }
 }
@@ -56,10 +61,7 @@ terraform {
 
     access_key        = "test"
     secret_key        = "test"
-    endpoint          = "<s3_endpoint>"
-    iam_endpoint      = "<iam_endpoint>"
-    sts_endpoint      = "<sts_endpoint>"
-    dynamodb_endpoint = "<dynamodb_endpoint>"
+<endpoints>
     skip_credentials_validation = true
     skip_metadata_api_check     = true
   }
@@ -126,7 +128,7 @@ def create_provider_config_file(provider_aliases=None):
             "<access_key>",
             get_access_key(provider) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
         )
-        endpoints = "\n".join([f'{s} = "{get_service_endpoint(s)}"' for s in services])
+        endpoints = "\n".join([f'    {s} = "{get_service_endpoint(s)}"' for s in services])
         provider_config = provider_config.replace("<endpoints>", endpoints)
         additional_configs = []
         if use_s3_path_style():
@@ -139,7 +141,7 @@ def create_provider_config_file(provider_aliases=None):
         region = provider.get("region") or get_region()
         if isinstance(region, list):
             region = region[0]
-        additional_configs += [f' region = "{region}"']
+        additional_configs += [f'region = "{region}"']
         provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
         provider_configs.append(provider_config)
 
@@ -203,17 +205,38 @@ def generate_s3_backend_config() -> str:
         "key": "terraform.tfstate",
         "dynamodb_table": "tf-test-state",
         "region": get_region(),
-        "s3_endpoint": get_service_endpoint("s3"),
-        "iam_endpoint": get_service_endpoint("iam"),
-        "sts_endpoint": get_service_endpoint("sts"),
-        "dynamodb_endpoint": get_service_endpoint("dynamodb"),
+        "endpoints": {
+            "s3": get_service_endpoint("s3"),
+            "iam": get_service_endpoint("iam"),
+            "sso": get_service_endpoint("sso"),
+            "sts": get_service_endpoint("sts"),
+            "dynamodb": get_service_endpoint("dynamodb"),
+        },
     }
     configs.update(backend_config)
     get_or_create_bucket(configs["bucket"])
     get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     for key, value in configs.items():
-        value = str(value).lower() if isinstance(value, bool) else str(value)
+        if isinstance(value, bool):
+            value = str(value).lower()
+        elif isinstance(value, dict):
+            is_tf_legacy = not (TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5))
+            if key == "endpoints" and is_tf_legacy:
+                value = textwrap.indent(
+                    text=textwrap.dedent(f"""\
+                        endpoint          = "{value["s3"]}"
+                        iam_endpoint      = "{value["iam"]}"
+                        sts_endpoint      = "{value["sts"]}"
+                        dynamodb_endpoint = "{value["dynamodb"]}"
+                    """),
+                    prefix=" " * 4)
+            else:
+                value = textwrap.indent(
+                    text=f"{key} = {{\n" + "\n".join([f'  {k} = "{v}"' for k, v in value.items()]) + "\n}",
+                    prefix=" " * 4)
+        else:
+            value = str(value)
         result = result.replace(f"<{key}>", value)
     return result
 
@@ -347,6 +370,12 @@ def parse_tf_files() -> dict:
     return result
 
 
+def get_tf_version(env):
+    global TF_VERSION
+    output = subprocess.run([f"{TF_CMD}", "version", "-json"], env=env, check=True, capture_output=True).stdout.decode("utf-8")
+    TF_VERSION = version.parse(json.loads(output)["terraform_version"])
+
+
 def run_tf_exec(cmd, env):
     """Run terraform using os.exec - can be useful as it does not require any I/O
         handling for stdin/out/err. Does *not* allow us to perform any cleanup logic."""
@@ -394,6 +423,14 @@ def to_str(obj) -> bytes:
 def main():
     env = dict(os.environ)
     cmd = [TF_CMD] + sys.argv[1:]
+
+    try:
+        get_tf_version(env)
+        if not TF_VERSION:
+            raise ValueError
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Unable to determine version. See error message for details: {e}")
+        exit(1)
 
     # create TF provider config file
     providers = determine_provider_aliases()
