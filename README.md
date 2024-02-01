@@ -48,6 +48,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.17.1: Add `packaging` module to install requirements
 * v0.17.0: Add option to use new endpoints S3 backend options
 * v0.16.1: Update Setuptools to exclude tests during packaging
 * v0.16.0: Introducing semantic versioning and AWS_ENDPOINT_URL variable
