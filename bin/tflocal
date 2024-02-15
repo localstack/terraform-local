@@ -39,6 +39,8 @@ LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers
 LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
 TF_VERSION: Optional[version.Version] = None
+ALWAYS_GENERATE = str(os.environ.get("ALWAYS_GENERATE")).strip().lower() in ["1", "true"]
+IGNORE_EXISTING_FILE = str(os.environ.get("IGNORE_EXISTING_FILE")).strip().lower() in ["1", "true"]
 TF_PROVIDER_CONFIG = """
 provider "aws" {
   access_key                  = "<access_key>"
@@ -154,10 +156,18 @@ def create_provider_config_file(provider_aliases=None):
     # write temporary config file
     providers_file = get_providers_file_path()
     if os.path.exists(providers_file):
-        msg = f"Providers override file {providers_file} already exists - please delete it first"
-        raise Exception(msg)
-    with open(providers_file, mode="w") as fp:
-        fp.write(tf_config)
+        if ALWAYS_GENERATE:
+            os.remove(providers_file)
+            write_config_file(providers_file, tf_config)
+            return providers_file
+
+        if not IGNORE_EXISTING_FILE:
+            msg = f"Providers override file {providers_file} already exists - please delete it first"
+            raise Exception(msg)
+
+    else:
+        write_config_file(providers_file, tf_config)
+
     return providers_file
 
 
@@ -168,6 +178,11 @@ def get_providers_file_path() -> str:
     if chdir:
         base_dir = chdir[0].removeprefix("-chdir=")
     return os.path.join(base_dir, LS_PROVIDERS_FILE)
+
+
+def write_config_file(providers_file, tf_config):
+    with open(providers_file, mode="w") as fp:
+        fp.write(tf_config)
 
 
 def determine_provider_aliases() -> list:

@@ -40,6 +40,8 @@ The following environment variables can be configured:
     * `default` profile's credentials are configured
     * falls back to the default `AWS_ACCESS_KEY_ID` mock value
 * `AWS_ACCESS_KEY_ID`: AWS Access Key ID to use for multi account setups (default: `test` -> account ID: `000000000000`)
+* `ALWAYS_GENERATE`: whether to always overwrite an existing override file
+* `IGNORE_EXISTING_FILE`: whether to ignore an existing override file
 
 ## Usage
 
