@@ -48,6 +48,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.17.2: Fix merge behavior of new S3 backend endpoints
 * v0.17.1: Add `packaging` module to install requirements
 * v0.17.0: Add option to use new endpoints S3 backend options
 * v0.16.1: Update Setuptools to exclude tests during packaging

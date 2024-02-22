@@ -213,6 +213,10 @@ def generate_s3_backend_config() -> str:
             "dynamodb": get_service_endpoint("dynamodb"),
         },
     }
+    if backend_config.get("endpoints"):
+        for key in configs["endpoints"]:
+            if key not in backend_config["endpoints"]:
+                backend_config["endpoints"][key] = configs["endpoints"][key]
     configs.update(backend_config)
     get_or_create_bucket(configs["bucket"])
     get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
