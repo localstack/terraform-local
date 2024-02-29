@@ -27,6 +27,7 @@ if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
 from localstack_client import config  # noqa: E402
 import hcl2  # noqa: E402
 
+DRY_RUN = str(os.environ.get("DRY_RUN")).strip().lower() in ["1", "true"]
 DEFAULT_REGION = "us-east-1"
 DEFAULT_ACCESS_KEY = "test"
 AWS_ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL")
@@ -153,12 +154,15 @@ def create_provider_config_file(provider_aliases=None):
 
     # write temporary config file
     providers_file = get_providers_file_path()
-    if os.path.exists(providers_file):
-        msg = f"Providers override file {providers_file} already exists - please delete it first"
-        raise Exception(msg)
+    write_provider_config_file(providers_file, tf_config)
+
+    return providers_file
+
+
+def write_provider_config_file(providers_file, tf_config):
+    """Write provider config into file"""
     with open(providers_file, mode="w") as fp:
         fp.write(tf_config)
-    return providers_file
 
 
 def get_providers_file_path() -> str:
@@ -239,6 +243,25 @@ def generate_s3_backend_config() -> str:
             value = str(value)
         result = result.replace(f"<{key}>", value)
     return result
+
+
+def check_override_file(providers_file):
+    """Checks override file existance"""
+    try:
+        if os.path.exists(providers_file):
+            msg = f"Providers override file {providers_file} already exists"
+            err_msg = msg + " - please delete it first"
+            if DRY_RUN:
+                msg += ". File will be overwritten."
+                print(msg)
+                print("\tOnly 'yes' will be accepted to approve.")
+                if input("\tEnter a value: ") != "yes":
+                    raise FileExistsError(err_msg)
+            else:
+                raise FileExistsError(err_msg)
+    except FileExistsError as e:
+        print(e)
+        exit(1)
 
 
 # ---
@@ -432,18 +455,21 @@ def main():
         print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
+    check_override_file(get_providers_file_path())
+
     # create TF provider config file
     providers = determine_provider_aliases()
     config_file = create_provider_config_file(providers)
 
     # call terraform command
-    try:
-        if USE_EXEC:
-            run_tf_exec(cmd, env)
-        else:
-            run_tf_subprocess(cmd, env)
-    finally:
-        os.remove(config_file)
+    if not DRY_RUN:
+        try:
+            if USE_EXEC:
+                run_tf_exec(cmd, env)
+            else:
+                run_tf_subprocess(cmd, env)
+        finally:
+            os.remove(config_file)
 
 
 if __name__ == "__main__":
