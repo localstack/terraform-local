@@ -4,9 +4,12 @@ import subprocess
 import tempfile
 import uuid
 from typing import Dict, Generator
+from shutil import rmtree
+from hashlib import md5
 
 import boto3
 import pytest
+
 
 THIS_PATH = os.path.abspath(os.path.dirname(__file__))
 ROOT_PATH = os.path.join(THIS_PATH, "..")
@@ -193,19 +196,63 @@ def test_s3_backend():
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
+def test_dry_run(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    state_bucket = "tf-state-dry-run"
+    state_table = "tf-state-dry-run"
+    bucket_name = "bucket.dry-run"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        dynamodb_table = "%s"
+        region = "us-east-2"
+        skip_credentials_validation = true
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, state_table, bucket_name)
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert os.path.isfile(override_file)
+    assert "b9b9f76e20227844bd98d80c56c71d37" == md5(open(override_file, 'rb').read()).hexdigest()
+    rmtree(temp_dir)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name="us-east-2")
+
+    with pytest.raises(s3.exceptions.NoSuchBucket):
+        s3.list_objects(Bucket=state_bucket)
+
+    # assert that DynamoDB table with state file locks exists
+    dynamodb = client("dynamodb", region_name="us-east-2")
+    with pytest.raises(dynamodb.exceptions.ResourceNotFoundException):
+        dynamodb.describe_table(TableName=state_table)
+
+    # assert that S3 resource has been created
+    s3 = client("s3")
+    with pytest.raises(s3.exceptions.ClientError):
+        s3.head_bucket(Bucket=bucket_name)
+
+
 ###
 # UTIL FUNCTIONS
 ###
 
-def deploy_tf_script(script: str, env_vars: Dict[str, str] = None):
-    with tempfile.TemporaryDirectory() as temp_dir:
+def deploy_tf_script(script: str, cleanup: bool = True, env_vars: Dict[str, str] = None, user_input: str = None):
+    with tempfile.TemporaryDirectory(delete=cleanup) as temp_dir:
         with open(os.path.join(temp_dir, "test.tf"), "w") as f:
             f.write(script)
         kwargs = {"cwd": temp_dir}
+        if user_input:
+            kwargs.update({"input": bytes(user_input, "utf-8")})
         kwargs["env"] = {**os.environ, **(env_vars or {})}
         run([TFLOCAL_BIN, "init"], **kwargs)
-        out = run([TFLOCAL_BIN, "apply", "-auto-approve"], **kwargs)
-        return out
+        run([TFLOCAL_BIN, "apply", "-auto-approve"], **kwargs)
+        return temp_dir
 
 
 def get_bucket_names(**kwargs: dict) -> list:
