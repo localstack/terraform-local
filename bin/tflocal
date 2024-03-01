@@ -238,8 +238,9 @@ def generate_s3_backend_config() -> str:
             k: (backend_config["endpoints"][k] if backend_config["endpoints"].get(k) else v)
             for k, v in configs["endpoints"].items()}
     configs.update(backend_config)
-    get_or_create_bucket(configs["bucket"])
-    get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
+    if not DRY_RUN:
+        get_or_create_bucket(configs["bucket"])
+        get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     for key, value in configs.items():
         if isinstance(value, bool):
