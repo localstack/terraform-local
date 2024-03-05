@@ -289,7 +289,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
                 assert not check_override_file_format(override_file)
                 rmtree(temp_dir)
             case 'endpoint = "http://s3-localhost.localstack.cloud:4566"':
-                override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c" # expected file hash for TF <= v1.5
+                override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c"  # expected file hash for TF <= v1.5
                 temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
                 override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
                 assert check_override_file_exists(override_file)
@@ -303,7 +303,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         if endpoints == "":
             override_file_hash = "582e08b55273a6939801dfa47b597f0f"  # expected file hash for TF > v1.5
         else:
-            override_file_hash = "9518640c9106f63325fb1cc7d20041b9"
+            override_file_hash = "9518640c9106f63325fb1cc7d20041b9"  # expected file hash for TF > v1.5
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
@@ -311,11 +311,14 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         assert check_override_file_format(override_file)
         rmtree(temp_dir)
 
+
 def check_override_file_exists(override_file):
     return os.path.isfile(override_file)
 
+
 def check_override_file_content(override_file, override_file_hash):
     return md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
+
 
 def check_override_file_format(override_file):
     try:
@@ -327,9 +330,11 @@ def check_override_file_format(override_file):
 
     return "endpoints" in result and "endpoint" not in result
 
+
 ###
 # UTIL FUNCTIONS
 ###
+
 
 def is_legacy_tf_version(version, major: int = 1, minor: int = 5) -> bool:
     """Check if Terraform version is legacy"""
