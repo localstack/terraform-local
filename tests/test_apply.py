@@ -3,12 +3,16 @@ import random
 import subprocess
 import tempfile
 import uuid
+import json
 from typing import Dict, Generator
 from shutil import rmtree
 from hashlib import md5
+from packaging import version
+
 
 import boto3
 import pytest
+import hcl2
 
 
 THIS_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -195,7 +199,6 @@ def test_s3_backend():
     result = s3.head_bucket(Bucket=bucket_name)
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
-
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
@@ -215,11 +218,18 @@ def test_dry_run(monkeypatch):
       bucket = "%s"
     }
     """ % (state_bucket, state_table, bucket_name)
+    is_legacy_tf = is_legacy_tf_version(get_tf_version())
+
     temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert os.path.isfile(override_file)
-    assert md5(open(override_file, 'rb').read()).hexdigest() in ("6abd2c4e92bb0ca0ae827b2a070486b8", "b9b9f76e20227844bd98d80c56c71d37")
-    rmtree(temp_dir)
+
+    if is_legacy_tf:
+        override_file_hash = "6abd2c4e92bb0ca0ae827b2a070486b8" # expected file hash for TF <= v1.5
+    else:
+        override_file_hash = "b9b9f76e20227844bd98d80c56c71d37" # expected file hash for TF > v1.5
+
+    assert md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -237,10 +247,95 @@ def test_dry_run(monkeypatch):
     with pytest.raises(s3.exceptions.ClientError):
         s3.head_bucket(Bucket=bucket_name)
 
+@pytest.mark.parametrize("endpoints", [
+    '',
+    'endpoint = "http://s3-localhost.localstack.cloud:4566"',
+    'endpoints = { "s3": "http://s3-localhost.localstack.cloud:4566" }',
+    '''
+    endpoint = "http://localhost-s3.localstack.cloud:4566"
+    endpoints = { "s3": "http://s3-localhost.localstack.cloud:4566" }
+    '''])
+def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
+    monkeypatch.setenv("DRY_RUN", "1")
+    state_bucket = "tf-state-merge"
+    state_table = "tf-state-merge"
+    bucket_name = "bucket.merge"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        dynamodb_table = "%s"
+        region = "us-east-2"
+        skip_credentials_validation = true
+        %s
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, state_table, endpoints, bucket_name)
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert os.path.isfile(override_file)
+
+    is_legacy_tf = is_legacy_tf_version(get_tf_version())
+
+    if endpoints == "":
+        if is_legacy_tf:
+            override_file_hash = "ddfba3546c869f0aa76c46887078d74c" # expected file hash for TF <= v1.5
+        else:
+            override_file_hash = "582e08b55273a6939801dfa47b597f0f" # expected file hash for TF > v1.5
+    else:
+        if is_legacy_tf:
+            override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c" # expected file hash for TF <= v1.5
+        else:
+            override_file_hash = "9518640c9106f63325fb1cc7d20041b9" # expected file hash for TF > v1.5
+
+    assert md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
+
+    try:
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            result = result["terraform"][0]["backend"][0]["s3"]
+    except Exception as e:
+        print(f'Unable to parse "{override_file}" as HCL file: {e}')#
+    finally:
+        rmtree(temp_dir)
+
+    if is_legacy_tf:
+        assert "endpoints" not in result and "endpoint" in result
+    else:
+        assert "endpoints" in result and "endpoint" not in result
+
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        dynamodb_table = "%s"
+        region = "us-east-2"
+        skip_credentials_validation = true
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, state_table, bucket_name)
 
 ###
 # UTIL FUNCTIONS
 ###
+
+def is_legacy_tf_version(version, major: int = 1, minor: int = 5) -> bool:
+    # Check if Terraform version is legacy
+    if version.major < major or (version.major == major and version.minor <= minor):
+        return True
+    return False
+
+def get_tf_version():
+    output = run([TFLOCAL_BIN, "version", "-json"]).decode("utf-8")
+    return version.parse(json.loads(output)["terraform_version"])
 
 def deploy_tf_script(script: str, cleanup: bool = True, env_vars: Dict[str, str] = None, user_input: str = None):
     with tempfile.TemporaryDirectory(delete=cleanup) as temp_dir:
