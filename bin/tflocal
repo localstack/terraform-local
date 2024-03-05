@@ -191,6 +191,7 @@ def determine_provider_aliases() -> list:
 
 def generate_s3_backend_config() -> str:
     """Generate an S3 `backend {..}` block with local endpoints, if configured"""
+    is_tf_legacy = not (TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5))
     backend_config = None
     tf_files = parse_tf_files()
     for filename, obj in tf_files.items():
@@ -228,6 +229,8 @@ def generate_s3_backend_config() -> str:
         },
     }
     # Merge in legacy endpoint configs if not existing already
+    if is_tf_legacy and backend_config.get("endpoints"):
+        raise ValueError("Warning: Unsupported backend options detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version.")
     for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
         if legacy_endpoint in backend_config and (not backend_config.get("endpoints") or endpoint not in backend_config["endpoints"]):
             if not backend_config.get("endpoints"):
@@ -247,7 +250,6 @@ def generate_s3_backend_config() -> str:
         if isinstance(value, bool):
             value = str(value).lower()
         elif isinstance(value, dict):
-            is_tf_legacy = not (TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5))
             if key == "endpoints" and is_tf_legacy:
                 value = textwrap.indent(
                     text=textwrap.dedent(f"""\
