@@ -277,58 +277,59 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
       bucket = "%s"
     }
     """ % (state_bucket, state_table, endpoints, bucket_name)
-    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
-    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
-    assert os.path.isfile(override_file)
-
     is_legacy_tf = is_legacy_tf_version(get_tf_version())
-
-    if endpoints == "":
-        if is_legacy_tf:
-            override_file_hash = "ddfba3546c869f0aa76c46887078d74c"  # expected file hash for TF <= v1.5
-        else:
-            override_file_hash = "582e08b55273a6939801dfa47b597f0f"  # expected file hash for TF > v1.5
+    if is_legacy_tf:
+        match endpoints:
+            case "":
+                override_file_hash = "ddfba3546c869f0aa76c46887078d74c"  # expected file hash for TF <= v1.5
+                temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+                override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+                assert check_override_file_exists(override_file)
+                assert check_override_file_content(override_file, override_file_hash)
+                assert not check_override_file_format(override_file)
+                rmtree(temp_dir)
+            case 'endpoint = "http://s3-localhost.localstack.cloud:4566"':
+                override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c" # expected file hash for TF <= v1.5
+                temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+                override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+                assert check_override_file_exists(override_file)
+                assert check_override_file_content(override_file, override_file_hash)
+                assert not check_override_file_format(override_file)
+                rmtree(temp_dir)
+            case _:
+                with pytest.raises(subprocess.CalledProcessError):
+                    deploy_tf_script(config, user_input="yes")
     else:
-        if is_legacy_tf:
-            override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c"  # expected file hash for TF <= v1.5
+        if endpoints == "":
+            override_file_hash = "582e08b55273a6939801dfa47b597f0f"  # expected file hash for TF > v1.5
         else:
-            override_file_hash = "9518640c9106f63325fb1cc7d20041b9"  # expected file hash for TF > v1.5
+            override_file_hash = "9518640c9106f63325fb1cc7d20041b9"
+        temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+        override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+        assert check_override_file_exists(override_file)
+        assert check_override_file_content(override_file, override_file_hash)
+        assert check_override_file_format(override_file)
+        rmtree(temp_dir)
 
-    assert md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
+def check_override_file_exists(override_file):
+    return os.path.isfile(override_file)
 
+def check_override_file_content(override_file, override_file_hash):
+    return md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
+
+def check_override_file_format(override_file):
     try:
         with open(override_file, "r") as fp:
             result = hcl2.load(fp)
             result = result["terraform"][0]["backend"][0]["s3"]
     except Exception as e:
         print(f'Unable to parse "{override_file}" as HCL file: {e}')
-    finally:
-        rmtree(temp_dir)
 
-    if is_legacy_tf:
-        assert "endpoints" not in result and "endpoint" in result
-    else:
-        assert "endpoints" in result and "endpoint" not in result
-
-    config = """
-    terraform {
-      backend "s3" {
-        bucket = "%s"
-        key    = "terraform.tfstate"
-        dynamodb_table = "%s"
-        region = "us-east-2"
-        skip_credentials_validation = true
-      }
-    }
-    resource "aws_s3_bucket" "test-bucket" {
-      bucket = "%s"
-    }
-    """ % (state_bucket, state_table, bucket_name)
+    return "endpoints" in result and "endpoint" not in result
 
 ###
 # UTIL FUNCTIONS
 ###
-
 
 def is_legacy_tf_version(version, major: int = 1, minor: int = 5) -> bool:
     """Check if Terraform version is legacy"""
