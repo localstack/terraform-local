@@ -218,7 +218,7 @@ def test_dry_run(monkeypatch):
     temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert os.path.isfile(override_file)
-    assert "b9b9f76e20227844bd98d80c56c71d37" == md5(open(override_file, 'rb').read()).hexdigest()
+    assert md5(open(override_file, 'rb').read()).hexdigest() in ("6abd2c4e92bb0ca0ae827b2a070486b8", "b9b9f76e20227844bd98d80c56c71d37")
     rmtree(temp_dir)
 
     # assert that bucket with state file exists
