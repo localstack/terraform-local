@@ -36,6 +36,7 @@ LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
+TF_PROXIED_CMDS = ("init", "plan", "apply", "destroy")
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
 LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
@@ -401,6 +402,11 @@ def get_or_create_ddb_table(table_name: str, region: str = None):
 # ---
 # TF UTILS
 # ---
+def is_override_needed(args) -> bool:
+    if any(map(lambda x: x in args, TF_PROXIED_CMDS)):
+        return True
+    return False
+
 
 def parse_tf_files() -> dict:
     """Parse the local *.tf files and return a dict of <filename> -> <resource_dict>"""
@@ -476,22 +482,26 @@ def main():
         print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
-    check_override_file(get_providers_file_path())
+    if is_override_needed(sys.argv[1:]):
+        check_override_file(get_providers_file_path())
 
-    # create TF provider config file
-    providers = determine_provider_aliases()
-    config_file = create_provider_config_file(providers)
+        # create TF provider config file
+        providers = determine_provider_aliases()
+        config_file = create_provider_config_file(providers)
 
-    # call terraform command
-    if not DRY_RUN:
+    # call terraform command if not dry-run or any of the commands
+    if not DRY_RUN or (DRY_RUN and not is_override_needed(sys.argv[1:])):
         try:
             if USE_EXEC:
                 run_tf_exec(cmd, env)
             else:
                 run_tf_subprocess(cmd, env)
         finally:
-            os.remove(config_file)
-
+            try:
+                os.remove(config_file)
+            except UnboundLocalError:
+                # fall through if haven't set during dry-run
+                pass
 
 if __name__ == "__main__":
     main()
