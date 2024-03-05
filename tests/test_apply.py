@@ -199,6 +199,7 @@ def test_s3_backend():
     result = s3.head_bucket(Bucket=bucket_name)
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
+
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
@@ -225,9 +226,9 @@ def test_dry_run(monkeypatch):
     assert os.path.isfile(override_file)
 
     if is_legacy_tf:
-        override_file_hash = "6abd2c4e92bb0ca0ae827b2a070486b8" # expected file hash for TF <= v1.5
+        override_file_hash = "6abd2c4e92bb0ca0ae827b2a070486b8"  # expected file hash for TF <= v1.5
     else:
-        override_file_hash = "b9b9f76e20227844bd98d80c56c71d37" # expected file hash for TF > v1.5
+        override_file_hash = "b9b9f76e20227844bd98d80c56c71d37"  # expected file hash for TF > v1.5
 
     assert md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
 
@@ -246,6 +247,7 @@ def test_dry_run(monkeypatch):
     s3 = client("s3")
     with pytest.raises(s3.exceptions.ClientError):
         s3.head_bucket(Bucket=bucket_name)
+
 
 @pytest.mark.parametrize("endpoints", [
     '',
@@ -283,14 +285,14 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
 
     if endpoints == "":
         if is_legacy_tf:
-            override_file_hash = "ddfba3546c869f0aa76c46887078d74c" # expected file hash for TF <= v1.5
+            override_file_hash = "ddfba3546c869f0aa76c46887078d74c"  # expected file hash for TF <= v1.5
         else:
-            override_file_hash = "582e08b55273a6939801dfa47b597f0f" # expected file hash for TF > v1.5
+            override_file_hash = "582e08b55273a6939801dfa47b597f0f"  # expected file hash for TF > v1.5
     else:
         if is_legacy_tf:
-            override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c" # expected file hash for TF <= v1.5
+            override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c"  # expected file hash for TF <= v1.5
         else:
-            override_file_hash = "9518640c9106f63325fb1cc7d20041b9" # expected file hash for TF > v1.5
+            override_file_hash = "9518640c9106f63325fb1cc7d20041b9"  # expected file hash for TF > v1.5
 
     assert md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
 
@@ -299,7 +301,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
             result = hcl2.load(fp)
             result = result["terraform"][0]["backend"][0]["s3"]
     except Exception as e:
-        print(f'Unable to parse "{override_file}" as HCL file: {e}')#
+        print(f'Unable to parse "{override_file}" as HCL file: {e}')
     finally:
         rmtree(temp_dir)
 
@@ -327,15 +329,19 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
 # UTIL FUNCTIONS
 ###
 
+
 def is_legacy_tf_version(version, major: int = 1, minor: int = 5) -> bool:
-    # Check if Terraform version is legacy
+    """Check if Terraform version is legacy"""
     if version.major < major or (version.major == major and version.minor <= minor):
         return True
     return False
 
+
 def get_tf_version():
+    """Get Terraform version"""
     output = run([TFLOCAL_BIN, "version", "-json"]).decode("utf-8")
     return version.parse(json.loads(output)["terraform_version"])
+
 
 def deploy_tf_script(script: str, cleanup: bool = True, env_vars: Dict[str, str] = None, user_input: str = None):
     with tempfile.TemporaryDirectory(delete=cleanup) as temp_dir:
