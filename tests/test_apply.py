@@ -219,7 +219,7 @@ def test_dry_run(monkeypatch):
       bucket = "%s"
     }
     """ % (state_bucket, state_table, bucket_name)
-    is_legacy_tf = is_legacy_tf_version(get_tf_version())
+    is_legacy_tf = is_legacy_tf_version(get_version())
 
     temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
@@ -277,7 +277,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
       bucket = "%s"
     }
     """ % (state_bucket, state_table, endpoints, bucket_name)
-    is_legacy_tf = is_legacy_tf_version(get_tf_version())
+    is_legacy_tf = is_legacy_tf_version(get_version())
     if is_legacy_tf:
         match endpoints:
             case "":
@@ -343,7 +343,7 @@ def is_legacy_tf_version(version, major: int = 1, minor: int = 5) -> bool:
     return False
 
 
-def get_tf_version():
+def get_version():
     """Get Terraform version"""
     output = run([TFLOCAL_BIN, "version", "-json"]).decode("utf-8")
     return version.parse(json.loads(output)["terraform_version"])
