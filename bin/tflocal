@@ -191,7 +191,7 @@ def determine_provider_aliases() -> list:
 
 def generate_s3_backend_config() -> str:
     """Generate an S3 `backend {..}` block with local endpoints, if configured"""
-    is_tf_legacy = not (TF_VERSION.major > 1 or (TF_VERSION.major == 1 and TF_VERSION.minor > 5))
+    is_tf_legacy = TF_VERSION < version.Version("1.6")
     backend_config = None
     tf_files = parse_tf_files()
     for filename, obj in tf_files.items():
@@ -230,7 +230,8 @@ def generate_s3_backend_config() -> str:
     }
     # Merge in legacy endpoint configs if not existing already
     if is_tf_legacy and backend_config.get("endpoints"):
-        raise ValueError("Warning: Unsupported backend options detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version.")
+        print("Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version.")
+        exit(1)
     for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
         if legacy_endpoint in backend_config and (not backend_config.get("endpoints") or endpoint not in backend_config["endpoints"]):
             if not backend_config.get("endpoints"):
@@ -239,7 +240,7 @@ def generate_s3_backend_config() -> str:
     # Add any missing default endpoints
     if backend_config.get("endpoints"):
         backend_config["endpoints"] = {
-            k: (backend_config["endpoints"][k] if backend_config["endpoints"].get(k) else v)
+            k: backend_config["endpoints"].get(k) or v
             for k, v in configs["endpoints"].items()}
     configs.update(backend_config)
     if not DRY_RUN:
@@ -269,22 +270,18 @@ def generate_s3_backend_config() -> str:
     return result
 
 
-def check_override_file(providers_file):
+def check_override_file(providers_file: str) -> None:
     """Checks override file existance"""
-    try:
-        if os.path.exists(providers_file):
-            msg = f"Providers override file {providers_file} already exists"
-            err_msg = msg + " - please delete it first"
-            if DRY_RUN:
-                msg += ". File will be overwritten."
-                print(msg)
-                print("\tOnly 'yes' will be accepted to approve.")
-                if input("\tEnter a value: ") != "yes":
-                    raise FileExistsError(err_msg)
-            else:
-                raise FileExistsError(err_msg)
-    except FileExistsError as e:
-        print(e)
+    if os.path.exists(providers_file):
+        msg = f"Providers override file {providers_file} already exists"
+        err_msg = msg + " - please delete it first, exiting..."
+        if DRY_RUN:
+            msg += ". File will be overwritten."
+            print(msg)
+            print("\tOnly 'yes' will be accepted to approve.")
+            if input("\tEnter a value: ") == "yes":
+                return
+        print(err_msg)
         exit(1)
 
 
@@ -490,20 +487,20 @@ def main():
         # create TF provider config file
         providers = determine_provider_aliases()
         config_file = create_provider_config_file(providers)
+    else:
+        config_file = None
 
     # call terraform command if not dry-run or any of the commands
-    if not DRY_RUN or (DRY_RUN and not is_override_needed(sys.argv[1:])):
+    if not DRY_RUN or not is_override_needed(sys.argv[1:]):
         try:
             if USE_EXEC:
                 run_tf_exec(cmd, env)
             else:
                 run_tf_subprocess(cmd, env)
         finally:
-            try:
+            # fall through if haven't set during dry-run
+            if config_file:
                 os.remove(config_file)
-            except UnboundLocalError:
-                # fall through if haven't set during dry-run
-                pass
 
 
 if __name__ == "__main__":
