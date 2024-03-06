@@ -6,7 +6,6 @@ import uuid
 import json
 from typing import Dict, Generator
 from shutil import rmtree
-from hashlib import md5
 from packaging import version
 
 
@@ -223,14 +222,9 @@ def test_dry_run(monkeypatch):
 
     temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
-    assert os.path.isfile(override_file)
+    assert check_override_file_exists(override_file)
 
-    if is_legacy_tf:
-        override_file_hash = "6abd2c4e92bb0ca0ae827b2a070486b8"  # expected file hash for TF <= v1.5
-    else:
-        override_file_hash = "b9b9f76e20227844bd98d80c56c71d37"  # expected file hash for TF > v1.5
-
-    assert md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
+    assert check_override_file_content(override_file, is_legacy=is_legacy_tf)
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -278,37 +272,14 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
     }
     """ % (state_bucket, state_table, endpoints, bucket_name)
     is_legacy_tf = is_legacy_tf_version(get_version())
-    if is_legacy_tf:
-        match endpoints:
-            case "":
-                override_file_hash = "ddfba3546c869f0aa76c46887078d74c"  # expected file hash for TF <= v1.5
-                temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
-                override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
-                assert check_override_file_exists(override_file)
-                assert check_override_file_content(override_file, override_file_hash)
-                assert not check_override_file_format(override_file)
-                rmtree(temp_dir)
-            case 'endpoint = "http://s3-localhost.localstack.cloud:4566"':
-                override_file_hash = "ee9c2ee41cf0eaad05d259dfc44cc35c"  # expected file hash for TF <= v1.5
-                temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
-                override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
-                assert check_override_file_exists(override_file)
-                assert check_override_file_content(override_file, override_file_hash)
-                assert not check_override_file_format(override_file)
-                rmtree(temp_dir)
-            case _:
-                with pytest.raises(subprocess.CalledProcessError):
-                    deploy_tf_script(config, user_input="yes")
+    if is_legacy_tf and endpoints not in ("", 'endpoint = "http://s3-localhost.localstack.cloud:4566"'):
+        with pytest.raises(subprocess.CalledProcessError):
+            deploy_tf_script(config, user_input="yes")
     else:
-        if endpoints == "":
-            override_file_hash = "582e08b55273a6939801dfa47b597f0f"  # expected file hash for TF > v1.5
-        else:
-            override_file_hash = "9518640c9106f63325fb1cc7d20041b9"  # expected file hash for TF > v1.5
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
-        assert check_override_file_content(override_file, override_file_hash)
-        assert check_override_file_format(override_file)
+        assert check_override_file_content(override_file, is_legacy=is_legacy_tf)
         rmtree(temp_dir)
 
 
@@ -316,11 +287,20 @@ def check_override_file_exists(override_file):
     return os.path.isfile(override_file)
 
 
-def check_override_file_content(override_file, override_file_hash):
-    return md5(open(override_file, 'rb').read()).hexdigest() == override_file_hash
-
-
-def check_override_file_format(override_file):
+def check_override_file_content(override_file, is_legacy: bool = False):
+    legacy_options = (
+        "endpoint",
+        "iam_endpoint",
+        "dynamodb_endpoint",
+        "sts_endpoint",
+    )
+    new_options = (
+        "iam",
+        "dynamodb",
+        "s3",
+        "sso",
+        "sts",
+    )
     try:
         with open(override_file, "r") as fp:
             result = hcl2.load(fp)
@@ -328,7 +308,14 @@ def check_override_file_format(override_file):
     except Exception as e:
         print(f'Unable to parse "{override_file}" as HCL file: {e}')
 
-    return "endpoints" in result and "endpoint" not in result
+    new_options_check = "endpoints" in result and all(map(lambda x: x in result.get("endpoints"), new_options))
+
+    if is_legacy:
+        legacy_options_check = all(map(lambda x: x in result, legacy_options))
+        return not new_options_check and legacy_options_check
+
+    legacy_options_check = any(map(lambda x: x in result, legacy_options))
+    return new_options_check and not legacy_options_check
 
 
 ###
@@ -336,9 +323,9 @@ def check_override_file_format(override_file):
 ###
 
 
-def is_legacy_tf_version(version, major: int = 1, minor: int = 5) -> bool:
+def is_legacy_tf_version(tf_version, legacy_version: str = "1.6") -> bool:
     """Check if Terraform version is legacy"""
-    if version.major < major or (version.major == major and version.minor <= minor):
+    if tf_version < version.Version(legacy_version):
         return True
     return False
 
