@@ -38,10 +38,10 @@ jobs:
       uses: actions/checkout@v3
     - name: Pull LocalStack Docker image
       run: docker pull localstack/localstack &
-    - name: Set up Python 3.11
+    - name: Set up Python 3.12
       uses: actions/setup-python@v2
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     - name: Install dependencies
       run: make install
     - name: Run code linter

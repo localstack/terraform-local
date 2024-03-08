@@ -24,6 +24,7 @@ pip install terraform-local
 ## Configurations
 
 The following environment variables can be configured:
+* `DRY_RUN`: Generate the override file without invoking Terraform
 * `TF_CMD`: Terraform command to call (default: `terraform`)
 * `AWS_ENDPOINT_URL`: hostname and port of the target LocalStack instance
 * `LOCALSTACK_HOSTNAME`: __(Deprecated)__ host name of the target LocalStack instance
@@ -48,6 +49,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.18.0: Add `DRY_RUN` and patch S3 backend entrypoints
 * v0.17.1: Add `packaging` module to install requirements
 * v0.17.0: Add option to use new endpoints S3 backend options
 * v0.16.1: Update Setuptools to exclude tests during packaging
