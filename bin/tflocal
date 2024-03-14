@@ -36,7 +36,7 @@ LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
-TF_PROXIED_CMDS = ("init", "plan", "apply", "destroy")
+TF_UNPROXIED_CMDS = os.environ.get("TF_UNPROXIED_CMDS").split(sep=",") if os.environ.get("TF_UNPROXIED_CMDS") else ("fmt", "validate", "version")
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
 LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
@@ -402,9 +402,9 @@ def get_or_create_ddb_table(table_name: str, region: str = None):
 # TF UTILS
 # ---
 def is_override_needed(args) -> bool:
-    if any(map(lambda x: x in args, TF_PROXIED_CMDS)):
-        return True
-    return False
+    if any(map(lambda x: x in args, TF_UNPROXIED_CMDS)):
+        return False
+    return True
 
 
 def parse_tf_files() -> dict:
