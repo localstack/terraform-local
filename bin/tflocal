@@ -60,6 +60,7 @@ terraform {
     bucket         = "<bucket>"
     key            = "<key>"
     dynamodb_table = "<dynamodb_table>"
+    use_path_style = "<use_path_style>"
 
     access_key        = "test"
     secret_key        = "test"
@@ -220,6 +221,7 @@ def generate_s3_backend_config() -> str:
         "key": "terraform.tfstate",
         "dynamodb_table": "tf-test-state",
         "region": get_region(),
+        "use_path_style": "true",
         "endpoints": {
             "s3": get_service_endpoint("s3"),
             "iam": get_service_endpoint("iam"),
@@ -247,6 +249,9 @@ def generate_s3_backend_config() -> str:
         get_or_create_bucket(configs["bucket"])
         get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
+    if is_tf_legacy:
+        result = result.replace("use_path_style", "force_path_style")
+        configs["force_path_style"] = configs.pop("use_path_style")
     for key, value in configs.items():
         if isinstance(value, bool):
             value = str(value).lower()
