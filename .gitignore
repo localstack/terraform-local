@@ -1,6 +1,7 @@
 # Custom
 .envrc
 .env
+.venv
 tmp/
 
 .DS_Store
