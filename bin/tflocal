@@ -221,7 +221,7 @@ def generate_s3_backend_config() -> str:
         "key": "terraform.tfstate",
         "dynamodb_table": "tf-test-state",
         "region": get_region(),
-        "use_path_style": "true",
+        "use_path_style": "false",
         "endpoints": {
             "s3": get_service_endpoint("s3"),
             "iam": get_service_endpoint("iam"),
@@ -244,6 +244,11 @@ def generate_s3_backend_config() -> str:
         backend_config["endpoints"] = {
             k: backend_config["endpoints"].get(k) or v
             for k, v in configs["endpoints"].items()}
+    # If the endpoint is configured in the backend we use that endpoint
+    # otherwise we will use the default created for the provider. Note that the user
+    # can still override this value with `use_path_style`in backend tf config
+    if use_s3_path_style(backend_config.get("endpoints", {}).get("s3")):
+        backend_config["use_path_style"] = "true"
     configs.update(backend_config)
     if not DRY_RUN:
         get_or_create_bucket(configs["bucket"])
@@ -294,7 +299,7 @@ def check_override_file(providers_file: str) -> None:
 # AWS CLIENT UTILS
 # ---
 
-def use_s3_path_style() -> bool:
+def use_s3_path_style(endpoint: str = "") -> bool:
     """
     Whether to use S3 path addressing (depending on the configured S3 endpoint)
     If the endpoint starts with the `s3.` prefix, LocalStack will recognize virtual host addressing. If the endpoint
@@ -302,7 +307,9 @@ def use_s3_path_style() -> bool:
     inter container communications in Docker.
     """
     try:
-        host = urlparse(get_service_endpoint("s3")).hostname
+        if endpoint:
+            endpoint = add_http_protocol(endpoint)
+        host = urlparse(endpoint or get_service_endpoint("s3")).hostname
     except ValueError:
         host = ""
 
@@ -348,15 +355,20 @@ def deactivate_access_key(access_key: str) -> str:
     return "L" + access_key[1:] if access_key[0] == "A" else access_key
 
 
+def add_http_protocol(url: str) -> str:
+    """Add the http:// protocal if not found in the url"""
+    if "://" not in url:
+        return f"http://{url}"
+    return url
+
+
 def get_service_endpoint(service: str) -> str:
     """Get the service endpoint URL for the given service name"""
     # allow configuring a custom endpoint via the environment
     env_name = f"{service.replace('-', '_').upper().strip()}_ENDPOINT"
     env_endpoint = os.environ.get(env_name, "").strip()
     if env_endpoint:
-        if "://" not in env_endpoint:
-            env_endpoint = f"http://{env_endpoint}"
-        return env_endpoint
+        return add_http_protocol(env_endpoint)
 
     # some services need specific hostnames
     hostname = LOCALSTACK_HOSTNAME
