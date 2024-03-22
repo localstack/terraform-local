@@ -215,6 +215,74 @@ def test_s3_backend():
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
+@pytest.mark.parametrize("s3_hostname", ["", "localstack", "s3.amazonaws.com"])
+def test_s3_backend_use_path_style_with_hostname(monkeypatch, s3_hostname):
+    monkeypatch.setenv("DRY_RUN", "1")
+    monkeypatch.setenv("S3_HOSTNAME", s3_hostname)
+
+    state_bucket = f"tf-state-{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-2"
+        skip_credentials_validation = true
+      }
+    }
+    """ % state_bucket
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+
+    # Assert the override file set path style appropriately
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+
+    assert check_override_file_exists(override_file)
+    with open(override_file, "r") as fp:
+        result = hcl2.load(fp)
+        result = result["terraform"][0]["backend"][0]["s3"]
+
+    # if the hostname isn't provided or is a s3.* we shouldn't use path name
+    use_path_style = s3_hostname != "" and not s3_hostname.startswith("s3.")
+    path_style_key = "force_path_style" if is_legacy_tf_version(get_version()) else "use_path_style"
+    assert result[path_style_key] == json.dumps(use_path_style)
+
+    rmtree(temp_dir)
+
+
+@pytest.mark.parametrize("s3_endpoint", ["http://localhost:4566", "https://s3.amazonaws.com"])
+def test_s3_backend_use_path_style_with_endpoint(monkeypatch, s3_endpoint):
+    monkeypatch.setenv("DRY_RUN", "1")
+
+    state_bucket = f"tf-state-{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-2"
+        skip_credentials_validation = true
+        endpoint = "%s"
+      }
+    }
+    """ % (state_bucket, s3_endpoint)
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+
+    # Assert the override file set path style appropriately
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+
+    assert check_override_file_exists(override_file)
+    with open(override_file, "r") as fp:
+        result = hcl2.load(fp)
+        result = result["terraform"][0]["backend"][0]["s3"]
+
+    # if endpoint is a s3.* we shouldn't use path name
+    use_path_style = s3_endpoint.find("s3.") == -1
+    path_style_key = "force_path_style" if is_legacy_tf_version(get_version()) else "use_path_style"
+    assert result[path_style_key] == json.dumps(use_path_style)
+
+    rmtree(temp_dir)
+
+
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
