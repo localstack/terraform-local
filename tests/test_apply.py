@@ -113,23 +113,39 @@ def test_s3_path_addressing():
 
 
 def test_use_s3_path_style(monkeypatch):
-    monkeypatch.setenv("S3_HOSTNAME", "s3.localhost.localstack.cloud")
+    s3_hostname = "s3.localhost.localstack.cloud"
+    monkeypatch.setenv("S3_HOSTNAME", s3_hostname)
     import_cli_code()
     assert not use_s3_path_style()  # noqa
+    assert not use_s3_path_style(s3_hostname)  # noqa
 
-    monkeypatch.setenv("S3_HOSTNAME", "localhost")
+    s3_hostname = "localhost"
+    monkeypatch.setenv("S3_HOSTNAME", s3_hostname)
     import_cli_code()
     assert use_s3_path_style()  # noqa
+    assert use_s3_path_style(s3_hostname)  # noqa
 
     # test the case where the S3_HOSTNAME could be a Docker container name
-    monkeypatch.setenv("S3_HOSTNAME", "localstack")
+    s3_hostname = "localstack"
+    monkeypatch.setenv("S3_HOSTNAME", s3_hostname)
     import_cli_code()
     assert use_s3_path_style()  # noqa
+    assert use_s3_path_style(s3_hostname)  # noqa
 
     # test the case where the S3_HOSTNAME could be an arbitrary host starting with `s3.`
-    monkeypatch.setenv("S3_HOSTNAME", "s3.internal.host")
+    s3_hostname = "s3.internal.host"
+    monkeypatch.setenv("S3_HOSTNAME", s3_hostname)
     import_cli_code()
     assert not use_s3_path_style()  # noqa
+    assert not use_s3_path_style(s3_hostname)  # noqa
+
+    # test the case where the S3_HOSTNAME where a provided host name differs from env default.`
+    s3_hostname = "s3.internal.host"
+    backend_host_name = "localstack"
+    monkeypatch.setenv("S3_HOSTNAME", s3_hostname)
+    import_cli_code()
+    assert not use_s3_path_style()  # noqa
+    assert use_s3_path_style(backend_host_name)  # noqa
 
 
 def test_provider_aliases():
