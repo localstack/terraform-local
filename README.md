@@ -49,6 +49,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.18.2: Fix warning on aliased custom endpoint names
 * v0.18.1: Fix issue with not proxied commands
 * v0.18.0: Add `DRY_RUN` and patch S3 backend entrypoints
 * v0.17.1: Add `packaging` module to install requirements
