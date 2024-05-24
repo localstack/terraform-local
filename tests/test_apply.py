@@ -224,7 +224,7 @@ def test_dry_run(monkeypatch):
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert check_override_file_exists(override_file)
 
-    assert check_override_file_content(override_file, is_legacy=is_legacy_tf)
+    assert check_override_file_backend_content(override_file, is_legacy=is_legacy_tf)
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -241,6 +241,33 @@ def test_dry_run(monkeypatch):
     s3 = client("s3")
     with pytest.raises(s3.exceptions.ClientError):
         s3.head_bucket(Bucket=bucket_name)
+
+
+def test_service_endpoint_alias_replacements(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    config = """
+    provider "aws" {
+      region = "eu-west-1"
+    }"""
+
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert check_override_file_content(override_file)
+    rmtree(temp_dir)
+
+
+def check_override_file_content(override_file):
+    try:
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            result = result["provider"][0]["aws"]
+    except Exception as e:
+        print(f'Unable to parse "{override_file}" as HCL file: {e}')
+
+    endpoints = result["endpoints"][0]
+    if "config" in endpoints and "configservice" in endpoints:
+        return False
+    return True
 
 
 @pytest.mark.parametrize("endpoints", [
@@ -279,7 +306,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
-        assert check_override_file_content(override_file, is_legacy=is_legacy_tf)
+        assert check_override_file_backend_content(override_file, is_legacy=is_legacy_tf)
         rmtree(temp_dir)
 
 
@@ -287,7 +314,7 @@ def check_override_file_exists(override_file):
     return os.path.isfile(override_file)
 
 
-def check_override_file_content(override_file, is_legacy: bool = False):
+def check_override_file_backend_content(override_file, is_legacy: bool = False):
     legacy_options = (
         "endpoint",
         "iam_endpoint",
