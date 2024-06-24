@@ -262,7 +262,7 @@ def check_override_file_content(override_file):
             result = hcl2.load(fp)
             result = result["provider"][0]["aws"]
     except Exception as e:
-        print(f'Unable to parse "{override_file}" as HCL file: {e}')
+        raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
 
     endpoints = result["endpoints"][0]
     if "config" in endpoints and "configservice" in endpoints:
