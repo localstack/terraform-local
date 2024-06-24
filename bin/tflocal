@@ -70,6 +70,73 @@ terraform {
 }
 """
 PROCESS = None
+# some services have aliases which are mutually exclusive to each other
+# see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints#available-endpoint-customizations
+SERVICE_ALIASES = [
+    ("amp", "prometheus", "prometheusservice"),
+    ("appautoscaling", "applicationautoscaling"),
+    ("appintegrations", "appintegrationsservice"),
+    ("ce", "costexplorer"),
+    ("cloudcontrol", "cloudcontrolapi"),
+    ("cloudhsmv2", "cloudhsm"),
+    ("cognitoidp", "cognitoidentityprovider"),
+    ("configservice", "config"),
+    ("cur", "costandusagereportservice"),
+    ("deploy", "codedeploy"),
+    ("dms", "databasemigration", "databasemigrationservice"),
+    ("ds", "directoryservice"),
+    ("elasticbeanstalk", "beanstalk"),
+    ("elasticsearch", "es", "elasticsearchservice"),
+    ("elb", "elasticloadbalancing"),
+    ("elbv2", "elasticloadbalancingv2"),
+    ("events", "eventbridge", "cloudwatchevents"),
+    ("evidently", "cloudwatchevidently"),
+    ("grafana", "managedgrafana", "amg"),
+    ("inspector2", "inspectorv2"),
+    ("kafka", "msk"),
+    ("lexmodels", "lexmodelbuilding", "lexmodelbuildingservice", "lex"),
+    ("lexv2models", "lexmodelsv2"),
+    ("location", "locationservice"),
+    ("logs", "cloudwatchlog", "cloudwatchlogs"),
+    ("oam", "cloudwatchobservabilityaccessmanager"),
+    ("opensearch", "opensearchservice"),
+    ("osis", "opensearchingestion"),
+    ("rbin", "recyclebin"),
+    ("redshiftdata", "redshiftdataapiservice"),
+    ("resourcegroupstaggingapi", "resourcegroupstagging"),
+    ("rum", "cloudwatchrum"),
+    ("s3", "s3api"),
+    ("serverlessrepo", "serverlessapprepo", "serverlessapplicationrepository"),
+    ("servicecatalogappregistry", "appregistry"),
+    ("sfn", "stepfunctions"),
+    ("simpledb", "sdb"),
+    ("transcribe", "transcribeservice"),
+]
+# service names to be excluded (not yet available in TF)
+SERVICE_EXCLUSIONS = ["meteringmarketplace"]
+# maps services to be replaced with alternative names
+# skip services which do not have equivalent endpoint overrides
+# see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints
+SERVICE_REPLACEMENTS = {
+    "apigatewaymanagementapi": "",
+    "appconfigdata": "",
+    "ce": "costexplorer",
+    "dynamodbstreams": "",
+    "edge": "",
+    "emrserverless": "",
+    "iotdata": "",
+    "ioteventsdata": "",
+    "iotjobsdata": "",
+    "iotwireless": "",
+    "logs": "cloudwatchlogs",
+    "mediastoredata": "",
+    "qldbsession": "",
+    "rdsdata": "",
+    "sagemakerruntime": "",
+    "support": "",
+    "timestream": "",
+    "timestreamquery": "",
+}
 
 
 # ---
@@ -79,79 +146,14 @@ PROCESS = None
 def create_provider_config_file(provider_aliases=None):
     provider_aliases = provider_aliases or []
 
-    # maps services to be replaced with alternative names
-    # skip services which do not have equivalent endpoint overrides
-    # see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints
-    service_replaces = {
-        "apigatewaymanagementapi": "",
-        "appconfigdata": "",
-        "ce": "costexplorer",
-        "dynamodbstreams": "",
-        "edge": "",
-        "emrserverless": "",
-        "iotdata": "",
-        "ioteventsdata": "",
-        "iotjobsdata": "",
-        "iotwireless": "",
-        "logs": "cloudwatchlogs",
-        "mediastoredata": "",
-        "qldbsession": "",
-        "rdsdata": "",
-        "sagemakerruntime": "",
-        "support": "",
-        "timestream": "",
-        "timestreamquery": "",
-    }
-    # service names to be excluded (not yet available in TF)
-    service_excludes = ["meteringmarketplace"]
-    service_alias_pairs = [
-        ("amp", "prometheus", "prometheusservice"),
-        ("appautoscaling", "applicationautoscaling"),
-        ("appintegrations", "appintegrationsservice"),
-        ("ce", "costexplorer"),
-        ("cloudcontrol", "cloudcontrolapi"),
-        ("cloudhsmv2", "cloudhsm"),
-        ("cognitoidp", "cognitoidentityprovider"),
-        ("configservice", "config"),
-        ("cur", "costandusagereportservice"),
-        ("deploy", "codedeploy"),
-        ("dms", "databasemigration", "databasemigrationservice"),
-        ("ds", "directoryservice"),
-        ("elasticbeanstalk", "beanstalk"),
-        ("elasticsearch", "es", "elasticsearchservice"),
-        ("elb", "elasticloadbalancing"),
-        ("elbv2", "elasticloadbalancingv2"),
-        ("events", "eventbridge", "cloudwatchevents"),
-        ("evidently", "cloudwatchevidently"),
-        ("grafana", "managedgrafana", "amg"),
-        ("inspector2", "inspectorv2"),
-        ("kafka", "msk"),
-        ("lexmodels", "lexmodelbuilding", "lexmodelbuildingservice", "lex"),
-        ("lexv2models", "lexmodelsv2"),
-        ("location", "locationservice"),
-        ("logs", "cloudwatchlog", "cloudwatchlogs"),
-        ("oam", "cloudwatchobservabilityaccessmanager"),
-        ("opensearch", "opensearchservice"),
-        ("osis", "opensearchingestion"),
-        ("rbin", "recyclebin"),
-        ("redshiftdata", "redshiftdataapiservice"),
-        ("resourcegroupstaggingapi", "resourcegroupstagging"),
-        ("rum", "cloudwatchrum"),
-        ("s3", "s3api"),
-        ("serverlessrepo", "serverlessapprepo", "serverlessapplicationrepository"),
-        ("servicecatalogappregistry", "appregistry"),
-        ("sfn", "stepfunctions"),
-        ("simpledb", "sdb"),
-        ("transcribe", "transcribeservice"),
-    ]
     # Force service alias replacements
-    service_replaces.update({alias: alias_pairs[0] for alias_pairs in service_alias_pairs for alias in alias_pairs if alias != alias_pairs[0]})
+    SERVICE_REPLACEMENTS.update({alias: alias_pairs[0] for alias_pairs in SERVICE_ALIASES for alias in alias_pairs if alias != alias_pairs[0]})
 
     # create list of service names
     services = list(config.get_service_ports())
-    services = [srvc for srvc in services if srvc not in service_excludes]
+    services = [srvc for srvc in services if srvc not in SERVICE_EXCLUSIONS]
     services = [s.replace("-", "") for s in services]
-    for old, new in service_replaces.items():
+    for old, new in SERVICE_REPLACEMENTS.items():
         try:
             services.remove(old)
             if new and new not in services:
