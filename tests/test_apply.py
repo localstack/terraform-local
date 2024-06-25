@@ -99,7 +99,9 @@ def test_access_key_override_by_provider(monkeypatch):
 
 
 def test_s3_path_addressing():
-    bucket_name = f"bucket.{short_uid()}"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = f"bucket-{short_uid()}"
     config = """
     resource "aws_s3_bucket" "test-bucket" {
       bucket = "%s"
@@ -164,7 +166,9 @@ def test_provider_aliases():
 def test_s3_backend():
     state_bucket = f"tf-state-{short_uid()}"
     state_table = f"tf-state-{short_uid()}"
-    bucket_name = f"bucket.{short_uid()}"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = f"bucket-{short_uid()}"
     config = """
     terraform {
       backend "s3" {
@@ -203,7 +207,9 @@ def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
     state_table = "tf-state-dry-run"
-    bucket_name = "bucket.dry-run"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = "bucket-dry-run"
     config = """
     terraform {
       backend "s3" {
@@ -282,7 +288,9 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-merge"
     state_table = "tf-state-merge"
-    bucket_name = "bucket.merge"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = "bucket-merge"
     config = """
     terraform {
       backend "s3" {
