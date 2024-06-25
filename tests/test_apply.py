@@ -99,7 +99,9 @@ def test_access_key_override_by_provider(monkeypatch):
 
 
 def test_s3_path_addressing():
-    bucket_name = f"bucket.{short_uid()}"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = f"bucket-{short_uid()}"
     config = """
     resource "aws_s3_bucket" "test-bucket" {
       bucket = "%s"
@@ -164,7 +166,9 @@ def test_provider_aliases():
 def test_s3_backend():
     state_bucket = f"tf-state-{short_uid()}"
     state_table = f"tf-state-{short_uid()}"
-    bucket_name = f"bucket.{short_uid()}"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = f"bucket-{short_uid()}"
     config = """
     terraform {
       backend "s3" {
@@ -203,7 +207,9 @@ def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
     state_table = "tf-state-dry-run"
-    bucket_name = "bucket.dry-run"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = "bucket-dry-run"
     config = """
     terraform {
       backend "s3" {
@@ -224,7 +230,7 @@ def test_dry_run(monkeypatch):
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert check_override_file_exists(override_file)
 
-    assert check_override_file_content(override_file, is_legacy=is_legacy_tf)
+    assert check_override_file_backend_content(override_file, is_legacy=is_legacy_tf)
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -243,6 +249,33 @@ def test_dry_run(monkeypatch):
         s3.head_bucket(Bucket=bucket_name)
 
 
+def test_service_endpoint_alias_replacements(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    config = """
+    provider "aws" {
+      region = "eu-west-1"
+    }"""
+
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert check_override_file_content(override_file)
+    rmtree(temp_dir)
+
+
+def check_override_file_content(override_file):
+    try:
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            result = result["provider"][0]["aws"]
+    except Exception as e:
+        raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
+
+    endpoints = result["endpoints"][0]
+    if "config" in endpoints and "configservice" in endpoints:
+        return False
+    return True
+
+
 @pytest.mark.parametrize("endpoints", [
     '',
     'endpoint = "http://s3-localhost.localstack.cloud:4566"',
@@ -255,7 +288,9 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-merge"
     state_table = "tf-state-merge"
-    bucket_name = "bucket.merge"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = "bucket-merge"
     config = """
     terraform {
       backend "s3" {
@@ -279,7 +314,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
-        assert check_override_file_content(override_file, is_legacy=is_legacy_tf)
+        assert check_override_file_backend_content(override_file, is_legacy=is_legacy_tf)
         rmtree(temp_dir)
 
 
@@ -287,7 +322,7 @@ def check_override_file_exists(override_file):
     return os.path.isfile(override_file)
 
 
-def check_override_file_content(override_file, is_legacy: bool = False):
+def check_override_file_backend_content(override_file, is_legacy: bool = False):
     legacy_options = (
         "endpoint",
         "iam_endpoint",
