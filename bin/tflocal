@@ -221,12 +221,13 @@ def get_providers_file_path() -> str:
 
 def determine_provider_aliases() -> list:
     """Return a list of providers (and aliases) configured in the *.tf files (if any)"""
+    skipped = str(os.environ.get("SKIP_ALIASES") or "").strip().split(",")
     result = []
     tf_files = parse_tf_files()
     for _file, obj in tf_files.items():
         try:
             providers = ensure_list(obj.get("provider", []))
-            aws_providers = [prov["aws"] for prov in providers if prov.get("aws")]
+            aws_providers = [prov["aws"] for prov in providers if prov.get("aws") and prov.get("aws").get("alias") not in skipped]
             result.extend(aws_providers)
         except Exception as e:
             print(f"Warning: Unable to extract providers from {_file}:", e)
