@@ -41,6 +41,7 @@ The following environment variables can be configured:
     * `default` profile's credentials are configured
     * falls back to the default `AWS_ACCESS_KEY_ID` mock value
 * `AWS_ACCESS_KEY_ID`: AWS Access Key ID to use for multi account setups (default: `test` -> account ID: `000000000000`)
+* `SKIP_ALIASES`: Allows to skip generating AWS provider overrides for specified aliased providers, e.g. `SKIP_ALIASES=aws_secrets,real_aws`
 
 ## Usage
 
@@ -49,6 +50,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.19.0: Add `SKIP_ALIASES` configuration environment variable
 * v0.18.2: Fix warning on aliased custom endpoint names
 * v0.18.1: Fix issue with not proxied commands
 * v0.18.0: Add `DRY_RUN` and patch S3 backend entrypoints
