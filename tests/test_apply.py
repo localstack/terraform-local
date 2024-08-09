@@ -353,6 +353,39 @@ def check_override_file_backend_content(override_file, is_legacy: bool = False):
     return new_options_check and not legacy_options_check
 
 
+def test_provider_aliases_ignored(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    config = """
+    provider "aws" {
+      region = "eu-west-1"
+    }
+    provider "aws" {
+      alias      = "us_east_2"
+      region     = "us-east-2"
+      secret_key = "not-overriden"
+    }
+    """
+
+    temp_dir = deploy_tf_script(config, cleanup=False, env_vars={"SKIP_ALIASES": "us_east_2"}, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert check_override_file_content_for_alias(override_file)
+    rmtree(temp_dir)
+
+
+def check_override_file_content_for_alias(override_file):
+    try:
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            result = result["provider"]
+    except Exception as e:
+        raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
+
+    for p in result:
+        if "aws" in p and "alias" in p["aws"] and p["aws"]["alias"] == "us_east_2":
+            return False
+    return True
+
+
 ###
 # UTIL FUNCTIONS
 ###
