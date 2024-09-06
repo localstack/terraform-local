@@ -230,7 +230,7 @@ def test_dry_run(monkeypatch):
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert check_override_file_exists(override_file)
 
-    assert check_override_file_backend_content(override_file, is_legacy=is_legacy_tf)
+    assert check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -276,6 +276,50 @@ def check_override_file_content(override_file):
     return True
 
 
+def test_s3_backend_configs_merge(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    state_bucket = "tf-state-conf-merge"
+    state_table = "tf-state-conf-merge"
+    # Temporarily change "." -> "-" as aws provider >5.55.0 fails with LocalStack
+    # by calling aws-global pseudo region at S3 bucket creation instead of us-east-1
+    bucket_name = "bucket-conf-merge"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        dynamodb_table = "%s"
+        region = "us-east-2"
+        skip_credentials_validation = true
+        encryption = true
+        use_path_style = true
+        acl = "bucket-owner-full-control"
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, state_table, bucket_name)
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert check_override_file_exists(override_file)
+    assert check_override_file_backend_extra_content(override_file)
+    rmtree(temp_dir)
+
+
+def check_override_file_backend_extra_content(override_file):
+    try:
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            result = result["terraform"][0]["backend"][0]["s3"]
+    except Exception as e:
+        raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
+
+    return result.get("use_path_style") is True and \
+        result.get("encryption") is True and \
+        result.get("acl") == "bucket-owner-full-control"
+
+
 @pytest.mark.parametrize("endpoints", [
     '',
     'endpoint = "http://s3-localhost.localstack.cloud:4566"',
@@ -314,7 +358,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
-        assert check_override_file_backend_content(override_file, is_legacy=is_legacy_tf)
+        assert check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
         rmtree(temp_dir)
 
 
@@ -322,7 +366,7 @@ def check_override_file_exists(override_file):
     return os.path.isfile(override_file)
 
 
-def check_override_file_backend_content(override_file, is_legacy: bool = False):
+def check_override_file_backend_endpoints_content(override_file, is_legacy: bool = False):
     legacy_options = (
         "endpoint",
         "iam_endpoint",
