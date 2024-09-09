@@ -297,14 +297,9 @@ def generate_s3_backend_config() -> str:
             value = str(value).lower()
         elif isinstance(value, dict):
             if key == "endpoints" and is_tf_legacy:
-                value = textwrap.indent(
-                    text=textwrap.dedent(f"""\
-                        endpoint          = "{value["s3"]}"
-                        iam_endpoint      = "{value["iam"]}"
-                        sts_endpoint      = "{value["sts"]}"
-                        dynamodb_endpoint = "{value["dynamodb"]}"
-                    """),
-                    prefix=" " * 4)
+                for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
+                    config_options += f'\n    {legacy_endpoint} = "{configs[key][endpoint]}"'
+                continue
             else:
                 value = textwrap.indent(
                     text=f"{key} = {{\n" + "\n".join([f'  {k} = "{v}"' for k, v in value.items()]) + "\n}",
