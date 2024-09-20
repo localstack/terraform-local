@@ -272,7 +272,7 @@ def generate_s3_backend_config() -> str:
         print("Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version.")
         exit(1)
     for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-        if legacy_endpoint in backend_config and (backend_config.get("endpoints") and endpoint in backend_config["endpoints"]):
+        if legacy_endpoint in backend_config and backend_config.get("endpoints") and endpoint in backend_config["endpoints"]:
             del backend_config[legacy_endpoint]
             continue
         if legacy_endpoint in backend_config and (not backend_config.get("endpoints") or endpoint not in backend_config["endpoints"]):
