@@ -55,17 +55,7 @@ provider "aws" {
 """
 TF_S3_BACKEND_CONFIG = """
 terraform {
-  backend "s3" {
-    region         = "<region>"
-    bucket         = "<bucket>"
-    key            = "<key>"
-    dynamodb_table = "<dynamodb_table>"
-
-    access_key        = "test"
-    secret_key        = "test"
-<endpoints>
-    skip_credentials_validation = true
-    skip_metadata_api_check     = true
+  backend "s3" {<configs>
   }
 }
 """
@@ -265,6 +255,10 @@ def generate_s3_backend_config() -> str:
         "key": "terraform.tfstate",
         "dynamodb_table": "tf-test-state",
         "region": get_region(),
+        "skip_credentials_validation": True,
+        "skip_metadata_api_check": True,
+        "secret_key": "test",
+
         "endpoints": {
             "s3": get_service_endpoint("s3"),
             "iam": get_service_endpoint("iam"),
@@ -278,40 +272,44 @@ def generate_s3_backend_config() -> str:
         print("Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version.")
         exit(1)
     for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
+        if legacy_endpoint in backend_config and backend_config.get("endpoints") and endpoint in backend_config["endpoints"]:
+            del backend_config[legacy_endpoint]
+            continue
         if legacy_endpoint in backend_config and (not backend_config.get("endpoints") or endpoint not in backend_config["endpoints"]):
             if not backend_config.get("endpoints"):
                 backend_config["endpoints"] = {}
             backend_config["endpoints"].update({endpoint: backend_config[legacy_endpoint]})
+            del backend_config[legacy_endpoint]
     # Add any missing default endpoints
     if backend_config.get("endpoints"):
         backend_config["endpoints"] = {
             k: backend_config["endpoints"].get(k) or v
             for k, v in configs["endpoints"].items()}
+    backend_config["access_key"] = get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
     configs.update(backend_config)
     if not DRY_RUN:
         get_or_create_bucket(configs["bucket"])
         get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
-    for key, value in configs.items():
+    config_options = ""
+    for key, value in sorted(configs.items()):
         if isinstance(value, bool):
             value = str(value).lower()
         elif isinstance(value, dict):
             if key == "endpoints" and is_tf_legacy:
-                value = textwrap.indent(
-                    text=textwrap.dedent(f"""\
-                        endpoint          = "{value["s3"]}"
-                        iam_endpoint      = "{value["iam"]}"
-                        sts_endpoint      = "{value["sts"]}"
-                        dynamodb_endpoint = "{value["dynamodb"]}"
-                    """),
-                    prefix=" " * 4)
+                for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
+                    config_options += f'\n    {legacy_endpoint} = "{configs[key][endpoint]}"'
+                continue
             else:
                 value = textwrap.indent(
                     text=f"{key} = {{\n" + "\n".join([f'  {k} = "{v}"' for k, v in value.items()]) + "\n}",
                     prefix=" " * 4)
+                config_options += f"\n{value}"
+                continue
         else:
-            value = str(value)
-        result = result.replace(f"<{key}>", value)
+            value = f'"{str(value)}"'
+        config_options += f'\n    {key} = {value}'
+    result = result.replace("<configs>", config_options)
     return result
 
 
