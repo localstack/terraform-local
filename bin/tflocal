@@ -306,6 +306,8 @@ def generate_s3_backend_config() -> str:
                     prefix=" " * 4)
                 config_options += f"\n{value}"
                 continue
+        elif isinstance(value, list):
+            value = json.dumps(value)
         else:
             value = f'"{str(value)}"'
         config_options += f'\n    {key} = {value}'
