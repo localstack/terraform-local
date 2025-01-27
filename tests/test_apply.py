@@ -13,6 +13,8 @@ import boto3
 import pytest
 import hcl2
 
+# TODO set up the tests to run with tox so we can run the tests with different python versions
+
 
 THIS_PATH = os.path.abspath(os.path.dirname(__file__))
 ROOT_PATH = os.path.join(THIS_PATH, "..")
@@ -452,6 +454,7 @@ def get_version():
 
 
 def deploy_tf_script(script: str, cleanup: bool = True, env_vars: Dict[str, str] = None, user_input: str = None):
+    # TODO the delete keyword was added in python 3.12, and the README and setup.cfg claims compatibility with earlier python versions
     with tempfile.TemporaryDirectory(delete=cleanup) as temp_dir:
         with open(os.path.join(temp_dir, "test.tf"), "w") as f:
             f.write(script)
