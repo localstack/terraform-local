@@ -294,6 +294,7 @@ def test_s3_backend_configs_merge(monkeypatch):
         encryption = true
         use_path_style = true
         acl = "bucket-owner-full-control"
+        shared_config_files = ["~/.aws/config","~/other/config"]
       }
     }
     resource "aws_s3_bucket" "test-bucket" {
@@ -317,7 +318,9 @@ def check_override_file_backend_extra_content(override_file):
 
     return result.get("use_path_style") is True and \
         result.get("encryption") is True and \
-        result.get("acl") == "bucket-owner-full-control"
+        result.get("acl") == "bucket-owner-full-control" and \
+        isinstance(result.get("shared_config_files"), list) and \
+        len(result.get("shared_config_files")) == 2
 
 
 @pytest.mark.parametrize("endpoints", [
