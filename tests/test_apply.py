@@ -13,6 +13,8 @@ import boto3
 import pytest
 import hcl2
 
+# TODO set up the tests to run with tox so we can run the tests with different python versions
+
 
 THIS_PATH = os.path.abspath(os.path.dirname(__file__))
 ROOT_PATH = os.path.join(THIS_PATH, "..")
@@ -294,6 +296,7 @@ def test_s3_backend_configs_merge(monkeypatch):
         encryption = true
         use_path_style = true
         acl = "bucket-owner-full-control"
+        shared_config_files = ["~/.aws/config","~/other/config"]
       }
     }
     resource "aws_s3_bucket" "test-bucket" {
@@ -317,7 +320,9 @@ def check_override_file_backend_extra_content(override_file):
 
     return result.get("use_path_style") is True and \
         result.get("encryption") is True and \
-        result.get("acl") == "bucket-owner-full-control"
+        result.get("acl") == "bucket-owner-full-control" and \
+        isinstance(result.get("shared_config_files"), list) and \
+        len(result.get("shared_config_files")) == 2
 
 
 @pytest.mark.parametrize("endpoints", [
@@ -449,6 +454,7 @@ def get_version():
 
 
 def deploy_tf_script(script: str, cleanup: bool = True, env_vars: Dict[str, str] = None, user_input: str = None):
+    # TODO the delete keyword was added in python 3.12, and the README and setup.cfg claims compatibility with earlier python versions
     with tempfile.TemporaryDirectory(delete=cleanup) as temp_dir:
         with open(os.path.join(temp_dir, "test.tf"), "w") as f:
             f.write(script)

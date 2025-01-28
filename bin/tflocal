@@ -306,6 +306,11 @@ def generate_s3_backend_config() -> str:
                     prefix=" " * 4)
                 config_options += f"\n{value}"
                 continue
+        elif isinstance(value, list):
+            # TODO this will break if it's a list of dicts or other complex object
+            # this serialization logic should probably be moved to a separate recursive function
+            as_string = [f'"{item}"' for item in value]
+            value = f'[{", ".join(as_string)}]'
         else:
             value = f'"{str(value)}"'
         config_options += f'\n    {key} = {value}'
