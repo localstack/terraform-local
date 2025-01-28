@@ -50,6 +50,7 @@ please refer to the man pages of `terraform --help`.
 
 ## Change Log
 
+* v0.20.1: Fix list config rendering
 * v0.20.0: Fix S3 backend option merging
 * v0.19.0: Add `SKIP_ALIASES` configuration environment variable
 * v0.18.2: Fix warning on aliased custom endpoint names
