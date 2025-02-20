@@ -42,14 +42,42 @@ The following environment variables can be configured:
     * falls back to the default `AWS_ACCESS_KEY_ID` mock value
 * `AWS_ACCESS_KEY_ID`: AWS Access Key ID to use for multi account setups (default: `test` -> account ID: `000000000000`)
 * `SKIP_ALIASES`: Allows to skip generating AWS provider overrides for specified aliased providers, e.g. `SKIP_ALIASES=aws_secrets,real_aws`
+* `ADDITIONAL_TF_OVERRIDE_LOCATIONS`: Comma-separated list of folder paths that will also receive a temporary `localstack_providers_override.tf` file
 
 ## Usage
 
 The `tflocal` command has the same usage as the `terraform` command. For detailed usage,
 please refer to the man pages of `terraform --help`.
 
+### Validation errors when using local terraform modules
+
+Note that if your project uses local terraform modules, and those modules reference providers, those folders *also* need to receive a temporary `localstack_providers_override.tf` file. Without it, you would get an error that looks like this when starting to process code from inside the module
+
+```
+╷
+│ Error: No valid credential sources found
+│ 
+│   with module.lambda.provider["registry.terraform.io/hashicorp/aws"],
+│   on ../../providers.tf line 11, in provider "aws":
+│   11: provider "aws" {
+│ 
+│ Please see https://registry.terraform.io/providers/hashicorp/aws
+│ for more information about providing credentials.
+│ 
+│ Error: failed to refresh cached credentials, no EC2 IMDS role found, operation error ec2imds: GetMetadata, access disabled to EC2 IMDS via client option, or "AWS_EC2_METADATA_DISABLED" environment variable
+```
+
+To address this issue, you may include a comma-separated list of folder paths that will recieve additional override files via an environment variable
+
+```
+ADDITIONAL_TF_OVERRIDE_LOCATIONS=/path/to/module1,path/to/module2 tflocal plan
+```
+
+[See this issue for more discussion](https://github.com/localstack/terraform-local/issues/67)
+
 ## Change Log
 
+* v0.21.0: Add ability to drop an override file in additional locations
 * v0.20.1: Fix list config rendering
 * v0.20.0: Fix S3 backend option merging
 * v0.19.0: Add `SKIP_ALIASES` configuration environment variable
