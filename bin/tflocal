@@ -557,7 +557,7 @@ def main():
         config_override_files.append(config_file_path)
 
     # call terraform command if not dry-run or any of the commands
-    if not DRY_RUN or not is_override_needed(sys.argv[1:]):
+    if not DRY_RUN or not config_override_files:
         try:
             if USE_EXEC:
                 run_tf_exec(cmd, env)
