@@ -18,7 +18,7 @@ import textwrap
 
 from packaging import version
 from urllib.parse import urlparse
-from typing import Optional
+from typing import Iterable, Optional
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
@@ -36,6 +36,7 @@ LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
+ADDITIONAL_TF_OVERRIDE_LOCATIONS = (x for x in os.environ.get("ADDITIONAL_TF_OVERRIDE_LOCATIONS", default="").split(sep=",") if x and x != "")
 TF_UNPROXIED_CMDS = os.environ.get("TF_UNPROXIED_CMDS").split(sep=",") if os.environ.get("TF_UNPROXIED_CMDS") else ("fmt", "validate", "version")
 LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
 LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
@@ -133,7 +134,7 @@ SERVICE_REPLACEMENTS = {
 # CONFIG GENERATION UTILS
 # ---
 
-def create_provider_config_file(provider_aliases=None):
+def create_provider_config_file(provider_file_path: str, provider_aliases=None) -> None:
     provider_aliases = provider_aliases or []
 
     # Force service alias replacements
@@ -188,10 +189,7 @@ def create_provider_config_file(provider_aliases=None):
     tf_config += generate_s3_backend_config()
 
     # write temporary config file
-    providers_file = get_providers_file_path()
-    write_provider_config_file(providers_file, tf_config)
-
-    return providers_file
+    write_provider_config_file(provider_file_path, tf_config)
 
 
 def write_provider_config_file(providers_file, tf_config):
@@ -199,13 +197,17 @@ def write_provider_config_file(providers_file, tf_config):
     with open(providers_file, mode="w") as fp:
         fp.write(tf_config)
 
-
-def get_providers_file_path() -> str:
-    """Determine the path under which the providers override file should be stored"""
+def get_default_provider_folder_path() -> str:
+    """Determine the folder under which the providers override file should be stored"""
     chdir = [arg for arg in sys.argv if arg.startswith("-chdir=")]
     base_dir = "."
     if chdir:
         base_dir = chdir[0].removeprefix("-chdir=")
+
+    return os.path.abspath(base_dir)
+
+def get_providers_file_path(base_dir) -> str:
+    """Retrieve the path under which the providers override file should be stored"""
     return os.path.join(base_dir, LS_PROVIDERS_FILE)
 
 
@@ -492,6 +494,21 @@ def run_tf_subprocess(cmd, env):
     PROCESS.communicate()
     sys.exit(PROCESS.returncode)
 
+def cleanup_override_files(override_files: Iterable[str]):
+    for file_path in override_files:
+        try:
+            os.remove(file_path)
+        except Exception:
+            print(f"Count not clean up '{file_path}'. This is not normally a problem but you can delete this file manually.")
+
+def get_folder_paths_that_require_an_override_file() -> Iterable[str]:
+    if not is_override_needed(sys.argv[1:]):
+        return
+
+    yield get_default_provider_folder_path()
+    for path in ADDITIONAL_TF_OVERRIDE_LOCATIONS:
+        yield path
+
 
 # ---
 # UTIL FUNCTIONS
@@ -529,14 +546,15 @@ def main():
         print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
-    if is_override_needed(sys.argv[1:]):
-        check_override_file(get_providers_file_path())
+    config_override_files = []
 
-        # create TF provider config file
+    for folder_path in get_folder_paths_that_require_an_override_file():
+        config_file_path = get_providers_file_path(folder_path)
+        check_override_file(config_file_path)
+
         providers = determine_provider_aliases()
-        config_file = create_provider_config_file(providers)
-    else:
-        config_file = None
+        create_provider_config_file(config_file_path, providers)
+        config_override_files.append(config_file_path)
 
     # call terraform command if not dry-run or any of the commands
     if not DRY_RUN or not is_override_needed(sys.argv[1:]):
@@ -546,9 +564,7 @@ def main():
             else:
                 run_tf_subprocess(cmd, env)
         finally:
-            # fall through if haven't set during dry-run
-            if config_file:
-                os.remove(config_file)
+            cleanup_override_files(config_override_files)
 
 
 if __name__ == "__main__":
