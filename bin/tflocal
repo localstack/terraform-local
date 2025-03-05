@@ -39,12 +39,8 @@ LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
-ADDITIONAL_TF_OVERRIDE_LOCATIONS = (
-    x
-    for x in os.environ.get("ADDITIONAL_TF_OVERRIDE_LOCATIONS", default="").split(
-        sep=","
-    )
-    if x and x != ""
+ADDITIONAL_TF_OVERRIDE_LOCATIONS = os.environ.get(
+    "ADDITIONAL_TF_OVERRIDE_LOCATIONS", default=""
 )
 TF_UNPROXIED_CMDS = (
     os.environ.get("TF_UNPROXIED_CMDS").split(sep=",")
@@ -579,8 +575,9 @@ def get_folder_paths_that_require_an_override_file() -> Iterable[str]:
         return
 
     yield get_default_provider_folder_path()
-    for path in ADDITIONAL_TF_OVERRIDE_LOCATIONS:
-        yield path
+    for path in ADDITIONAL_TF_OVERRIDE_LOCATIONS.split(sep=","):
+        if path.strip():
+            yield path
 
 
 # ---
