@@ -18,7 +18,7 @@ import textwrap
 
 from packaging import version
 from urllib.parse import urlparse
-from typing import Optional
+from typing import Iterable, Optional
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
@@ -31,14 +31,30 @@ DRY_RUN = str(os.environ.get("DRY_RUN")).strip().lower() in ["1", "true"]
 DEFAULT_REGION = "us-east-1"
 DEFAULT_ACCESS_KEY = "test"
 AWS_ENDPOINT_URL = os.environ.get("AWS_ENDPOINT_URL")
-CUSTOMIZE_ACCESS_KEY = str(os.environ.get("CUSTOMIZE_ACCESS_KEY")).strip().lower() in ["1", "true"]
+CUSTOMIZE_ACCESS_KEY = str(os.environ.get("CUSTOMIZE_ACCESS_KEY")).strip().lower() in [
+    "1",
+    "true",
+]
 LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
 TF_CMD = os.environ.get("TF_CMD") or "terraform"
-TF_UNPROXIED_CMDS = os.environ.get("TF_UNPROXIED_CMDS").split(sep=",") if os.environ.get("TF_UNPROXIED_CMDS") else ("fmt", "validate", "version")
-LS_PROVIDERS_FILE = os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
-LOCALSTACK_HOSTNAME = urlparse(AWS_ENDPOINT_URL).hostname or os.environ.get("LOCALSTACK_HOSTNAME") or "localhost"
+ADDITIONAL_TF_OVERRIDE_LOCATIONS = os.environ.get(
+    "ADDITIONAL_TF_OVERRIDE_LOCATIONS", default=""
+)
+TF_UNPROXIED_CMDS = (
+    os.environ.get("TF_UNPROXIED_CMDS").split(sep=",")
+    if os.environ.get("TF_UNPROXIED_CMDS")
+    else ("fmt", "validate", "version")
+)
+LS_PROVIDERS_FILE = (
+    os.environ.get("LS_PROVIDERS_FILE") or "localstack_providers_override.tf"
+)
+LOCALSTACK_HOSTNAME = (
+    urlparse(AWS_ENDPOINT_URL).hostname
+    or os.environ.get("LOCALSTACK_HOSTNAME")
+    or "localhost"
+)
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
 TF_VERSION: Optional[version.Version] = None
 TF_PROVIDER_CONFIG = """
@@ -133,11 +149,19 @@ SERVICE_REPLACEMENTS = {
 # CONFIG GENERATION UTILS
 # ---
 
-def create_provider_config_file(provider_aliases=None):
+
+def create_provider_config_file(provider_file_path: str, provider_aliases=None) -> None:
     provider_aliases = provider_aliases or []
 
     # Force service alias replacements
-    SERVICE_REPLACEMENTS.update({alias: alias_pairs[0] for alias_pairs in SERVICE_ALIASES for alias in alias_pairs if alias != alias_pairs[0]})
+    SERVICE_REPLACEMENTS.update(
+        {
+            alias: alias_pairs[0]
+            for alias_pairs in SERVICE_ALIASES
+            for alias in alias_pairs
+            if alias != alias_pairs[0]
+        }
+    )
 
     # create list of service names
     services = list(config.get_service_ports())
@@ -162,9 +186,11 @@ def create_provider_config_file(provider_aliases=None):
     for provider in provider_aliases:
         provider_config = TF_PROVIDER_CONFIG.replace(
             "<access_key>",
-            get_access_key(provider) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
+            get_access_key(provider) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY,
         )
-        endpoints = "\n".join([f'    {s} = "{get_service_endpoint(s)}"' for s in services])
+        endpoints = "\n".join(
+            [f'    {s} = "{get_service_endpoint(s)}"' for s in services]
+        )
         provider_config = provider_config.replace("<endpoints>", endpoints)
         additional_configs = []
         if use_s3_path_style():
@@ -178,7 +204,9 @@ def create_provider_config_file(provider_aliases=None):
         if isinstance(region, list):
             region = region[0]
         additional_configs += [f'region = "{region}"']
-        provider_config = provider_config.replace("<configs>", "\n".join(additional_configs))
+        provider_config = provider_config.replace(
+            "<configs>", "\n".join(additional_configs)
+        )
         provider_configs.append(provider_config)
 
     # construct final config file content
@@ -188,10 +216,7 @@ def create_provider_config_file(provider_aliases=None):
     tf_config += generate_s3_backend_config()
 
     # write temporary config file
-    providers_file = get_providers_file_path()
-    write_provider_config_file(providers_file, tf_config)
-
-    return providers_file
+    write_provider_config_file(provider_file_path, tf_config)
 
 
 def write_provider_config_file(providers_file, tf_config):
@@ -200,12 +225,18 @@ def write_provider_config_file(providers_file, tf_config):
         fp.write(tf_config)
 
 
-def get_providers_file_path() -> str:
-    """Determine the path under which the providers override file should be stored"""
+def get_default_provider_folder_path() -> str:
+    """Determine the folder under which the providers override file should be stored"""
     chdir = [arg for arg in sys.argv if arg.startswith("-chdir=")]
     base_dir = "."
     if chdir:
         base_dir = chdir[0].removeprefix("-chdir=")
+
+    return os.path.abspath(base_dir)
+
+
+def get_providers_file_path(base_dir) -> str:
+    """Retrieve the path under which the providers override file should be stored"""
     return os.path.join(base_dir, LS_PROVIDERS_FILE)
 
 
@@ -217,7 +248,11 @@ def determine_provider_aliases() -> list:
     for _file, obj in tf_files.items():
         try:
             providers = ensure_list(obj.get("provider", []))
-            aws_providers = [prov["aws"] for prov in providers if prov.get("aws") and prov.get("aws").get("alias") not in skipped]
+            aws_providers = [
+                prov["aws"]
+                for prov in providers
+                if prov.get("aws") and prov.get("aws").get("alias") not in skipped
+            ]
             result.extend(aws_providers)
         except Exception as e:
             print(f"Warning: Unable to extract providers from {_file}:", e)
@@ -258,7 +293,6 @@ def generate_s3_backend_config() -> str:
         "skip_credentials_validation": True,
         "skip_metadata_api_check": True,
         "secret_key": "test",
-
         "endpoints": {
             "s3": get_service_endpoint("s3"),
             "iam": get_service_endpoint("iam"),
@@ -269,23 +303,37 @@ def generate_s3_backend_config() -> str:
     }
     # Merge in legacy endpoint configs if not existing already
     if is_tf_legacy and backend_config.get("endpoints"):
-        print("Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version.")
+        print(
+            "Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version."
+        )
         exit(1)
     for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-        if legacy_endpoint in backend_config and backend_config.get("endpoints") and endpoint in backend_config["endpoints"]:
+        if (
+            legacy_endpoint in backend_config
+            and backend_config.get("endpoints")
+            and endpoint in backend_config["endpoints"]
+        ):
             del backend_config[legacy_endpoint]
             continue
-        if legacy_endpoint in backend_config and (not backend_config.get("endpoints") or endpoint not in backend_config["endpoints"]):
+        if legacy_endpoint in backend_config and (
+            not backend_config.get("endpoints")
+            or endpoint not in backend_config["endpoints"]
+        ):
             if not backend_config.get("endpoints"):
                 backend_config["endpoints"] = {}
-            backend_config["endpoints"].update({endpoint: backend_config[legacy_endpoint]})
+            backend_config["endpoints"].update(
+                {endpoint: backend_config[legacy_endpoint]}
+            )
             del backend_config[legacy_endpoint]
     # Add any missing default endpoints
     if backend_config.get("endpoints"):
         backend_config["endpoints"] = {
             k: backend_config["endpoints"].get(k) or v
-            for k, v in configs["endpoints"].items()}
-    backend_config["access_key"] = get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
+            for k, v in configs["endpoints"].items()
+        }
+    backend_config["access_key"] = (
+        get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
+    )
     configs.update(backend_config)
     if not DRY_RUN:
         get_or_create_bucket(configs["bucket"])
@@ -298,22 +346,27 @@ def generate_s3_backend_config() -> str:
         elif isinstance(value, dict):
             if key == "endpoints" and is_tf_legacy:
                 for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-                    config_options += f'\n    {legacy_endpoint} = "{configs[key][endpoint]}"'
+                    config_options += (
+                        f'\n    {legacy_endpoint} = "{configs[key][endpoint]}"'
+                    )
                 continue
             else:
                 value = textwrap.indent(
-                    text=f"{key} = {{\n" + "\n".join([f'  {k} = "{v}"' for k, v in value.items()]) + "\n}",
-                    prefix=" " * 4)
+                    text=f"{key} = {{\n"
+                    + "\n".join([f'  {k} = "{v}"' for k, v in value.items()])
+                    + "\n}",
+                    prefix=" " * 4,
+                )
                 config_options += f"\n{value}"
                 continue
         elif isinstance(value, list):
             # TODO this will break if it's a list of dicts or other complex object
             # this serialization logic should probably be moved to a separate recursive function
             as_string = [f'"{item}"' for item in value]
-            value = f'[{", ".join(as_string)}]'
+            value = f"[{', '.join(as_string)}]"
         else:
             value = f'"{str(value)}"'
-        config_options += f'\n    {key} = {value}'
+        config_options += f"\n    {key} = {value}"
     result = result.replace("<configs>", config_options)
     return result
 
@@ -336,6 +389,7 @@ def check_override_file(providers_file: str) -> None:
 # ---
 # AWS CLIENT UTILS
 # ---
+
 
 def use_s3_path_style() -> bool:
     """
@@ -361,6 +415,7 @@ def get_region() -> str:
         # Note that boto3 is currently not included in the dependencies, to
         # keep the library lightweight.
         import boto3
+
         region = boto3.session.Session().region_name
     except Exception:
         pass
@@ -369,7 +424,9 @@ def get_region() -> str:
 
 
 def get_access_key(provider: dict) -> str:
-    access_key = str(os.environ.get("AWS_ACCESS_KEY_ID") or provider.get("access_key", "")).strip()
+    access_key = str(
+        os.environ.get("AWS_ACCESS_KEY_ID") or provider.get("access_key", "")
+    ).strip()
     if access_key and access_key != DEFAULT_ACCESS_KEY:
         # Change live access key to mocked one
         return deactivate_access_key(access_key)
@@ -378,6 +435,7 @@ def get_access_key(provider: dict) -> str:
         # Note that boto3 is currently not included in the dependencies, to
         # keep the library lightweight.
         import boto3
+
         access_key = boto3.session.Session().get_credentials().access_key
     except Exception:
         pass
@@ -387,7 +445,7 @@ def get_access_key(provider: dict) -> str:
 
 def deactivate_access_key(access_key: str) -> str:
     """Safe guarding user from accidental live credential usage by deactivating access key IDs.
-        See more: https://docs.localstack.cloud/references/credentials/"""
+    See more: https://docs.localstack.cloud/references/credentials/"""
     return "L" + access_key[1:] if access_key[0] == "A" else access_key
 
 
@@ -413,10 +471,14 @@ def get_service_endpoint(service: str) -> str:
 
 def connect_to_service(service: str, region: str = None):
     import boto3
+
     region = region or get_region()
     return boto3.client(
-        service, endpoint_url=get_service_endpoint(service), region_name=region,
-        aws_access_key_id="test", aws_secret_access_key="test",
+        service,
+        endpoint_url=get_service_endpoint(service),
+        region_name=region,
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
     )
 
 
@@ -440,9 +502,10 @@ def get_or_create_ddb_table(table_name: str, region: str = None):
         return ddb_client.describe_table(TableName=table_name)
     except Exception:
         return ddb_client.create_table(
-            TableName=table_name, BillingMode="PAY_PER_REQUEST",
+            TableName=table_name,
+            BillingMode="PAY_PER_REQUEST",
             KeySchema=[{"AttributeName": "LockID", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "LockID", "AttributeType": "S"}]
+            AttributeDefinitions=[{"AttributeName": "LockID", "AttributeType": "S"}],
         )
 
 
@@ -469,13 +532,15 @@ def parse_tf_files() -> dict:
 
 def get_tf_version(env):
     global TF_VERSION
-    output = subprocess.run([f"{TF_CMD}", "version", "-json"], env=env, check=True, capture_output=True).stdout.decode("utf-8")
+    output = subprocess.run(
+        [f"{TF_CMD}", "version", "-json"], env=env, check=True, capture_output=True
+    ).stdout.decode("utf-8")
     TF_VERSION = version.parse(json.loads(output)["terraform_version"])
 
 
 def run_tf_exec(cmd, env):
     """Run terraform using os.exec - can be useful as it does not require any I/O
-        handling for stdin/out/err. Does *not* allow us to perform any cleanup logic."""
+    handling for stdin/out/err. Does *not* allow us to perform any cleanup logic."""
     os.execvpe(cmd[0], cmd, env=env)
 
 
@@ -485,17 +550,40 @@ def run_tf_subprocess(cmd, env):
 
     # register signal handlers
     import signal
+
     signal.signal(signal.SIGINT, signal_handler)
 
     PROCESS = subprocess.Popen(
-        cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stdout)
+        cmd, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stdout
+    )
     PROCESS.communicate()
     sys.exit(PROCESS.returncode)
+
+
+def cleanup_override_files(override_files: Iterable[str]):
+    for file_path in override_files:
+        try:
+            os.remove(file_path)
+        except Exception:
+            print(
+                f"Count not clean up '{file_path}'. This is not normally a problem but you can delete this file manually."
+            )
+
+
+def get_folder_paths_that_require_an_override_file() -> Iterable[str]:
+    if not is_override_needed(sys.argv[1:]):
+        return
+
+    yield get_default_provider_folder_path()
+    for path in ADDITIONAL_TF_OVERRIDE_LOCATIONS.split(sep=","):
+        if path.strip():
+            yield path
 
 
 # ---
 # UTIL FUNCTIONS
 # ---
+
 
 def signal_handler(sig, frame):
     PROCESS.send_signal(sig)
@@ -517,6 +605,7 @@ def to_str(obj) -> bytes:
 # MAIN ENTRYPOINT
 # ---
 
+
 def main():
     env = dict(os.environ)
     cmd = [TF_CMD] + sys.argv[1:]
@@ -529,26 +618,25 @@ def main():
         print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
-    if is_override_needed(sys.argv[1:]):
-        check_override_file(get_providers_file_path())
+    config_override_files = []
 
-        # create TF provider config file
+    for folder_path in get_folder_paths_that_require_an_override_file():
+        config_file_path = get_providers_file_path(folder_path)
+        check_override_file(config_file_path)
+
         providers = determine_provider_aliases()
-        config_file = create_provider_config_file(providers)
-    else:
-        config_file = None
+        create_provider_config_file(config_file_path, providers)
+        config_override_files.append(config_file_path)
 
     # call terraform command if not dry-run or any of the commands
-    if not DRY_RUN or not is_override_needed(sys.argv[1:]):
+    if not DRY_RUN or not config_override_files:
         try:
             if USE_EXEC:
                 run_tf_exec(cmd, env)
             else:
                 run_tf_subprocess(cmd, env)
         finally:
-            # fall through if haven't set during dry-run
-            if config_file:
-                os.remove(config_file)
+            cleanup_override_files(config_override_files)
 
 
 if __name__ == "__main__":
