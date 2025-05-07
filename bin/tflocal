@@ -301,6 +301,11 @@ def generate_s3_backend_config() -> str:
             "dynamodb": get_service_endpoint("dynamodb"),
         },
     }
+
+    for arg in sys.argv[1:]:
+        if arg.startswith('-backend-config='):
+            configSplit = arg.split('=')[1:]
+            configs[configSplit[0]] = configSplit[1]
     # Merge in legacy endpoint configs if not existing already
     if is_tf_legacy and backend_config.get("endpoints"):
         print(
@@ -343,6 +348,8 @@ def generate_s3_backend_config() -> str:
     for key, value in sorted(configs.items()):
         if isinstance(value, bool):
             value = str(value).lower()
+        elif value is None:
+            value = 'null'
         elif isinstance(value, dict):
             if key == "endpoints" and is_tf_legacy:
                 for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
@@ -497,6 +504,8 @@ def get_or_create_bucket(bucket_name: str):
 
 def get_or_create_ddb_table(table_name: str, region: str = None):
     """Get or create a DynamoDB table with the given name."""
+    if not table_name:
+        return False
     ddb_client = connect_to_service("dynamodb", region=region)
     try:
         return ddb_client.describe_table(TableName=table_name)
