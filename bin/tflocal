@@ -350,8 +350,7 @@ def generate_s3_backend_config() -> str:
     if not DRY_RUN:
         get_or_create_bucket(configs["bucket"])
         if "dynamodb_table" in configs:
-            get_or_create_ddb_table(
-                configs["dynamodb_table"], region=configs["region"])
+            get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     config_options = ""
     for key, value in sorted(configs.items()):
