@@ -77,6 +77,7 @@ ADDITIONAL_TF_OVERRIDE_LOCATIONS=/path/to/module1,path/to/module2 tflocal plan
 
 ## Change Log
 
+* v0.22.0: Fix S3 backend forcing DynamoDB State Lock to be enabled by default
 * v0.21.0: Add ability to drop an override file in additional locations
 * v0.20.1: Fix list config rendering
 * v0.20.0: Fix S3 backend option merging
