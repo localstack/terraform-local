@@ -288,7 +288,6 @@ def generate_s3_backend_config() -> str:
         # note: default values, updated by `backend_config` further below...
         "bucket": "tf-test-state",
         "key": "terraform.tfstate",
-        "dynamodb_table": "tf-test-state",
         "region": get_region(),
         "skip_credentials_validation": True,
         "skip_metadata_api_check": True,
@@ -337,7 +336,8 @@ def generate_s3_backend_config() -> str:
     configs.update(backend_config)
     if not DRY_RUN:
         get_or_create_bucket(configs["bucket"])
-        get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
+        if "dynamodb_table" in configs:
+            get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     config_options = ""
     for key, value in sorted(configs.items()):

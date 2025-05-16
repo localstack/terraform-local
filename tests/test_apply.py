@@ -205,6 +205,43 @@ def test_s3_backend():
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
+def test_s3_backend_state_lock_default():
+    state_bucket = f"tf-state-{short_uid()}"
+    bucket_name = f"bucket-{short_uid()}"
+    state_region = "us-west-1"
+    dynamodb_client = client("dynamodb", region_name=state_region)
+    table_amount = len(dynamodb_client.list_tables()["TableNames"])
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "%s"
+        skip_credentials_validation = true
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, state_region, bucket_name)
+    deploy_tf_script(config)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name=state_region)
+    result = s3.list_objects(Bucket=state_bucket)
+    keys = [obj["Key"] for obj in result["Contents"]]
+    assert "terraform.tfstate" in keys
+
+    # assert that DynamoDB table with state file locks has not been created by default
+    result = dynamodb_client.list_tables()
+    assert len(result["TableNames"]) == table_amount
+
+    # assert that S3 resource has been created
+    s3 = client("s3")
+    result = s3.head_bucket(Bucket=bucket_name)
+    assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
