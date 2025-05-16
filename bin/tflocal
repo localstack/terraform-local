@@ -55,7 +55,8 @@ LOCALSTACK_HOSTNAME = (
     or os.environ.get("LOCALSTACK_HOSTNAME")
     or "localhost"
 )
-EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
+EDGE_PORT = int(
+    urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
 TF_VERSION: Optional[version.Version] = None
 TF_PROVIDER_CONFIG = """
 provider "aws" {
@@ -193,7 +194,8 @@ def create_provider_config_file(provider_file_path: str, provider_aliases=None) 
     for provider in provider_aliases:
         provider_config = TF_PROVIDER_CONFIG.replace(
             "<access_key>",
-            get_access_key(provider) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY,
+            get_access_key(
+                provider) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY,
         )
         endpoints = "\n".join(
             [f'    {s} = "{get_service_endpoint(s)}"' for s in services]
@@ -341,13 +343,15 @@ def generate_s3_backend_config() -> str:
             for k, v in configs["endpoints"].items()
         }
     backend_config["access_key"] = (
-        get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
+        get_access_key(
+            backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
     )
     configs.update(backend_config)
     if not DRY_RUN:
         get_or_create_bucket(configs["bucket"])
         if "dynamodb_table" in configs:
-            get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
+            get_or_create_ddb_table(
+                configs["dynamodb_table"], region=configs["region"])
     result = TF_S3_BACKEND_CONFIG
     config_options = ""
     for key, value in sorted(configs.items()):
@@ -556,7 +560,8 @@ def get_or_create_bucket(bucket_name: str):
         region = s3_client.meta.region_name
         kwargs = {}
         if region != "us-east-1":
-            kwargs = {"CreateBucketConfiguration": {"LocationConstraint": region}}
+            kwargs = {"CreateBucketConfiguration": {
+                "LocationConstraint": region}}
         return s3_client.create_bucket(Bucket=bucket_name, **kwargs)
 
 
@@ -570,7 +575,8 @@ def get_or_create_ddb_table(table_name: str, region: str = None):
             TableName=table_name,
             BillingMode="PAY_PER_REQUEST",
             KeySchema=[{"AttributeName": "LockID", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "LockID", "AttributeType": "S"}],
+            AttributeDefinitions=[
+                {"AttributeName": "LockID", "AttributeType": "S"}],
         )
 
 
@@ -680,7 +686,8 @@ def main():
         if not TF_VERSION:
             raise ValueError
     except (FileNotFoundError, ValueError) as e:
-        print(f"Unable to determine version. See error message for details: {e}")
+        print(
+            f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
     config_override_files = []
