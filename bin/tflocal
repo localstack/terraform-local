@@ -75,6 +75,13 @@ terraform {
   }
 }
 """
+TF_REMOTE_STATE_CONFIG = """
+data "terraform_remote_state" "<name>" {
+  backend = "s3"
+  config = {<configs>
+  }
+}
+"""
 PROCESS = None
 # some services have aliases which are mutually exclusive to each other
 # see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints#available-endpoint-customizations
@@ -214,6 +221,9 @@ def create_provider_config_file(provider_file_path: str, provider_aliases=None) 
 
     # create s3 backend config
     tf_config += generate_s3_backend_config()
+
+    # create remote state config
+    tf_config += generate_remote_state_config()
 
     # write temporary config file
     write_provider_config_file(provider_file_path, tf_config)
@@ -370,6 +380,61 @@ def generate_s3_backend_config() -> str:
     result = result.replace("<configs>", config_options)
     return result
 
+def generate_remote_state_config() -> str:
+    """
+    Generate configuration for terraform_remote_state data sources to use LocalStack endpoints.
+    Similar to generate_s3_backend_config but for terraform_remote_state blocks.
+    """
+    tf_files = parse_tf_files()
+    if not tf_files:
+        return ""
+
+    result = ""
+    for filename, obj in tf_files.items():
+        if LS_PROVIDERS_FILE == filename:
+            continue
+            
+        data_blocks = ensure_list(obj.get("data", []))
+        for data_block in data_blocks:
+            terraform_remote_state = data_block.get("terraform_remote_state")
+            if not terraform_remote_state:
+                continue
+                
+            for data_name, data_config in terraform_remote_state.items():
+                if data_config.get("backend") != "s3":
+                    continue
+                    
+                # Create override for S3 remote state
+                config_attrs = data_config.get("config", {})
+                if not config_attrs:
+                    continue
+                
+                # Set up default configs
+                configs = {
+                    "bucket": config_attrs.get("bucket", "tf-test-state"),
+                    "key": config_attrs.get("key", "terraform.tfstate"),
+                    "region": config_attrs.get("region", get_region()),
+                    "endpoint": get_service_endpoint("s3"),
+                }
+                
+                # Update with user-provided configs
+                configs.update(config_attrs)
+                
+                # Generate config string
+                config_options = ""
+                for key, value in sorted(configs.items()):
+                    if isinstance(value, bool):
+                        value = str(value).lower()
+                    elif isinstance(value, (str, int, float)):
+                        value = f'"{value}"'
+                    config_options += f'\n    {key} = {value}'
+                
+                # Create the final config
+                remote_state_config = TF_REMOTE_STATE_CONFIG.replace("<name>", data_name)
+                remote_state_config = remote_state_config.replace("<configs>", config_options)
+                result += remote_state_config
+    
+    return result
 
 def check_override_file(providers_file: str) -> None:
     """Checks override file existance"""
