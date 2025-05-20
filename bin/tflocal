@@ -463,12 +463,6 @@ def generate_remote_state_config() -> str:
 
                 # Generate config string
                 config_options = ""
-                # for key, value in sorted(configs.items()):
-                #    if isinstance(value, bool):
-                #        value = str(value).lower()
-                #    elif isinstance(value, (str, int, float)):
-                #        value = f'"{value}"'
-                #    config_options += f"\n    {key} = {value}"
                 for key, value in sorted(configs.items()):
                     if isinstance(value, bool):
                         value = str(value).lower()
