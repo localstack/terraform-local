@@ -205,6 +205,47 @@ def test_s3_backend():
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
+def test_s3_backend_with_multiple_backends_in_files():
+    state_bucket = f"tf-state-{short_uid()}"
+    bucket_name = f"bucket-{short_uid()}"
+    config_main = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-2"
+        skip_credentials_validation = true
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, bucket_name)
+
+    config_other_file = """
+    terraform {}
+    """
+
+    # we manually need to add different files and create them to verify the fix
+    with tempfile.TemporaryDirectory(delete=True) as temp_dir:
+        with (
+            open(os.path.join(temp_dir, "test.tf"), "w") as f,
+            open(os.path.join(temp_dir, "test_2.tf"), "w") as f2,
+        ):
+            f.write(config_main)
+            f2.write(config_other_file)
+
+        kwargs = {"cwd": temp_dir, "env": dict(os.environ)}
+        run([TFLOCAL_BIN, "init"], **kwargs)
+        run([TFLOCAL_BIN, "apply", "-auto-approve"], **kwargs)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name="us-east-2")
+    result = s3.list_objects(Bucket=state_bucket)
+    keys = [obj["Key"] for obj in result["Contents"]]
+    assert "terraform.tfstate" in keys
+
+
 def test_s3_backend_state_lock_default():
     state_bucket = f"tf-state-{short_uid()}"
     bucket_name = f"bucket-{short_uid()}"
@@ -240,6 +281,66 @@ def test_s3_backend_state_lock_default():
     s3 = client("s3")
     result = s3.head_bucket(Bucket=bucket_name)
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+
+def test_s3_remote_data_source():
+    state_bucket = f"tf-data-source-{short_uid()}"
+    bucket_name = f"bucket-{short_uid()}"
+    object_key = f"obj-{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-1"
+        skip_credentials_validation = true
+      }
+    }
+
+    resource "aws_s3_bucket" "test_bucket" {
+      bucket = "%s"
+    }
+
+    output "bucket_name" {
+        value = aws_s3_bucket.test_bucket.bucket
+    }
+    """ % (state_bucket, bucket_name)
+    deploy_tf_script(config)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name="us-east-2")
+    result = s3.list_objects(Bucket=state_bucket)
+    keys = [obj["Key"] for obj in result["Contents"]]
+    assert "terraform.tfstate" in keys
+
+    # assert that S3 resource has been created
+    s3 = client("s3")
+    result = s3.head_bucket(Bucket=bucket_name)
+    assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    # now deploy the part that needs the S3 remote state
+    config += """
+    data "terraform_remote_state" "remote_data" {
+      backend = "s3"
+
+      config = {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region  = "us-east-1"
+      }
+    }
+
+    resource "aws_s3_object" "foo" {
+        bucket = data.terraform_remote_state.remote_data.outputs.bucket_name
+        key    = "%s"
+        content = "test"
+    }
+
+    """ % (state_bucket, object_key)
+    deploy_tf_script(config)
+
+    get_obj = s3.get_object(Bucket=bucket_name, Key=object_key)
+    assert get_obj["Body"].read() == b"test"
 
 
 def test_dry_run(monkeypatch):

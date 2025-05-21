@@ -18,7 +18,7 @@ import textwrap
 
 from packaging import version
 from urllib.parse import urlparse
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Dict
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
@@ -271,30 +271,23 @@ def determine_provider_aliases() -> list:
 
 def generate_s3_backend_config() -> str:
     """Generate an S3 `backend {..}` block with local endpoints, if configured"""
-    is_tf_legacy = TF_VERSION < version.Version("1.6")
-    backend_config = None
+    s3_backend_config = {}
     tf_files = parse_tf_files()
     for filename, obj in tf_files.items():
         if LS_PROVIDERS_FILE == filename:
             continue
         tf_configs = ensure_list(obj.get("terraform", []))
         for tf_config in tf_configs:
-            backend_config = ensure_list(tf_config.get("backend"))
-            if backend_config:
-                backend_config = backend_config[0]
-                break
-    backend_config = backend_config and backend_config.get("s3")
-    if not backend_config:
+            if tf_config.get("backend"):
+                backend_config = ensure_list(tf_config.get("backend"))[0]
+                if backend_config.get("s3"):
+                    s3_backend_config = backend_config["s3"]
+                    break
+
+    if not s3_backend_config:
         return ""
 
-    legacy_endpoint_mappings = {
-        "endpoint": "s3",
-        "iam_endpoint": "iam",
-        "sts_endpoint": "sts",
-        "dynamodb_endpoint": "dynamodb",
-    }
-
-    configs = {
+    backend_default_config = {
         # note: default values, updated by `backend_config` further below...
         "bucket": "tf-test-state",
         "key": "terraform.tfstate",
@@ -310,74 +303,17 @@ def generate_s3_backend_config() -> str:
             "dynamodb": get_service_endpoint("dynamodb"),
         },
     }
-    # Merge in legacy endpoint configs if not existing already
-    if is_tf_legacy and backend_config.get("endpoints"):
-        print(
-            "Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version."
-        )
-        exit(1)
-    for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-        if (
-            legacy_endpoint in backend_config
-            and backend_config.get("endpoints")
-            and endpoint in backend_config["endpoints"]
-        ):
-            del backend_config[legacy_endpoint]
-            continue
-        if legacy_endpoint in backend_config and (
-            not backend_config.get("endpoints")
-            or endpoint not in backend_config["endpoints"]
-        ):
-            if not backend_config.get("endpoints"):
-                backend_config["endpoints"] = {}
-            backend_config["endpoints"].update(
-                {endpoint: backend_config[legacy_endpoint]}
-            )
-            del backend_config[legacy_endpoint]
-    # Add any missing default endpoints
-    if backend_config.get("endpoints"):
-        backend_config["endpoints"] = {
-            k: backend_config["endpoints"].get(k) or v
-            for k, v in configs["endpoints"].items()
-        }
-    backend_config["access_key"] = (
-        get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
-    )
-    configs.update(backend_config)
+
+    config_options = _generate_s3_backend_config(s3_backend_config, backend_default_config)
     if not DRY_RUN:
-        get_or_create_bucket(configs["bucket"])
-        if "dynamodb_table" in configs:
-            get_or_create_ddb_table(configs["dynamodb_table"], region=configs["region"])
-    result = TF_S3_BACKEND_CONFIG
-    config_options = ""
-    for key, value in sorted(configs.items()):
-        if isinstance(value, bool):
-            value = str(value).lower()
-        elif isinstance(value, dict):
-            if key == "endpoints" and is_tf_legacy:
-                for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-                    config_options += (
-                        f'\n    {legacy_endpoint} = "{configs[key][endpoint]}"'
-                    )
-                continue
-            else:
-                value = textwrap.indent(
-                    text=f"{key} = {{\n"
-                    + "\n".join([f'  {k} = "{v}"' for k, v in value.items()])
-                    + "\n}",
-                    prefix=" " * 4,
-                )
-                config_options += f"\n{value}"
-                continue
-        elif isinstance(value, list):
-            # TODO this will break if it's a list of dicts or other complex object
-            # this serialization logic should probably be moved to a separate recursive function
-            as_string = [f'"{item}"' for item in value]
-            value = f"[{', '.join(as_string)}]"
-        else:
-            value = f'"{str(value)}"'
-        config_options += f"\n    {key} = {value}"
-    result = result.replace("<configs>", config_options)
+        get_or_create_bucket(backend_default_config["bucket"])
+        if "dynamodb_table" in backend_default_config:
+            get_or_create_ddb_table(
+                backend_default_config["dynamodb_table"],
+                region=backend_default_config["region"],
+            )
+
+    result = TF_S3_BACKEND_CONFIG.replace("<configs>", config_options)
     return result
 
 
@@ -387,15 +323,7 @@ def generate_remote_state_config() -> str:
     Similar to generate_s3_backend_config but for terraform_remote_state blocks.
     """
 
-    is_tf_legacy = TF_VERSION < version.Version("1.6")
     tf_files = parse_tf_files()
-
-    legacy_endpoint_mappings = {
-        "endpoint": "s3",
-        "iam_endpoint": "iam",
-        "sts_endpoint": "sts",
-        "dynamodb_endpoint": "dynamodb",
-    }
 
     result = ""
     for filename, obj in tf_files.items():
@@ -410,39 +338,18 @@ def generate_remote_state_config() -> str:
                 if data_config.get("backend") != "s3":
                     continue
                 # Create override for S3 remote state
-                config_attrs = data_config.get("config", {})
-                if not config_attrs:
+                backend_config = data_config.get("config", {})
+                if not backend_config:
                     continue
-                # Merge in legacy endpoint configs if not existing already
-                if is_tf_legacy and config_attrs.get("endpoints"):
-                    print(
-                        "Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version."
-                    )
-                    exit(1)
-                for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-                    if (
-                        legacy_endpoint in config_attrs
-                        and config_attrs.get("endpoints")
-                        and endpoint in config_attrs["endpoints"]
-                    ):
-                        del config_attrs[legacy_endpoint]
-                        continue
-                    if legacy_endpoint in config_attrs and (
-                        not config_attrs.get("endpoints")
-                        or endpoint not in config_attrs["endpoints"]
-                    ):
-                        if not config_attrs.get("endpoints"):
-                            config_attrs["endpoints"] = {}
-                        config_attrs["endpoints"].update(
-                            {endpoint: config_attrs[legacy_endpoint]}
-                        )
-                        del config_attrs[legacy_endpoint]
 
                 # Set up default configs
-                configs = {
-                    "bucket": config_attrs.get("bucket", "tf-test-state"),
-                    "key": config_attrs.get("key", "terraform.tfstate"),
-                    "region": config_attrs.get("region", get_region()),
+                remote_state_default_config = {
+                    "bucket": "tf-test-state",
+                    "key": "terraform.tfstate",
+                    "region": get_region(),
+                    "skip_credentials_validation": True,
+                    "skip_metadata_api_check": True,
+                    "secret_key": "test",
                     "endpoints": {
                         "s3": get_service_endpoint("s3"),
                         "iam": get_service_endpoint("iam"),
@@ -451,63 +358,93 @@ def generate_remote_state_config() -> str:
                     },
                 }
 
-                # Add any missing default endpoints
-                if config_attrs.get("endpoints"):
-                    config_attrs["endpoints"] = {
-                        k: config_attrs["endpoints"].get(k) or v
-                        for k, v in configs["endpoints"].items()
-                    }
-
-                # Update with user-provided configs
-                configs.update(config_attrs)
-
-                # Generate config string
-                config_options = ""
-                for key, value in sorted(configs.items()):
-                    if isinstance(value, bool):
-                        value = str(value).lower()
-                    elif isinstance(value, dict):
-                        if key == "endpoints" and is_tf_legacy:
-                            for (
-                                legacy_endpoint,
-                                endpoint,
-                            ) in legacy_endpoint_mappings.items():
-                                config_options += f'\n    {legacy_endpoint} = "{configs[key][endpoint]}"'
-                            continue
-                        else:
-                            value = textwrap.indent(
-                                text=f"{key} = {{\n"
-                                + "\n".join(
-                                    [f'  {k} = "{v}"' for k, v in value.items()]
-                                )
-                                + "\n}",
-                                prefix=" " * 4,
-                            )
-                            config_options += f"\n{value}"
-                            continue
-                    elif isinstance(value, list):
-                        # TODO this will break if it's a list of dicts or other complex object
-                        # this serialization logic should probably be moved to a separate recursive function
-                        as_string = [f'"{item}"' for item in value]
-                        value = f"[{', '.join(as_string)}]"
-                    else:
-                        value = f'"{str(value)}"'
-                    config_options += f"\n    {key} = {value}"
+                config_options = _generate_s3_backend_config(backend_config, remote_state_default_config)
 
                 # Create the final config
                 remote_state_config = TF_REMOTE_STATE_CONFIG.replace(
                     "<name>", data_name
-                )
-                remote_state_config = remote_state_config.replace(
-                    "<configs>", config_options
-                )
+                ).replace("<configs>", config_options)
                 result += remote_state_config
 
     return result
 
 
+def _generate_s3_backend_config(backend_config: Dict, default_config: Dict) -> str:
+    is_tf_legacy = TF_VERSION < version.Version("1.6")
+    legacy_endpoint_mappings = {
+        "endpoint": "s3",
+        "iam_endpoint": "iam",
+        "sts_endpoint": "sts",
+        "dynamodb_endpoint": "dynamodb",
+    }
+
+    # Merge in legacy endpoint configs if not existing already
+    if is_tf_legacy and backend_config.get("endpoints"):
+        print(
+            "Warning: Unsupported backend option(s) detected (`endpoints`). Please make sure you always use the corresponding options to your Terraform version."
+        )
+        exit(1)
+    for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
+        if (
+                legacy_endpoint in backend_config
+                and backend_config.get("endpoints")
+                and endpoint in backend_config["endpoints"]
+        ):
+            del backend_config[legacy_endpoint]
+            continue
+        if legacy_endpoint in backend_config and (
+                not backend_config.get("endpoints")
+                or endpoint not in backend_config["endpoints"]
+        ):
+            if not backend_config.get("endpoints"):
+                backend_config["endpoints"] = {}
+            backend_config["endpoints"].update(
+                {endpoint: backend_config[legacy_endpoint]}
+            )
+            del backend_config[legacy_endpoint]
+
+    # Add any missing default endpoints
+    if backend_config.get("endpoints"):
+        default_config["endpoints"].update(backend_config["endpoints"])
+
+    backend_config["access_key"] = (
+        get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY
+    )
+
+    # Update with user-provided configs
+    default_config.update(backend_config)
+    # Generate config string
+    config_options = ""
+    for key, value in sorted(default_config.items()):
+        if isinstance(value, bool):
+            value = str(value).lower()
+        elif isinstance(value, dict):
+            if key == "endpoints" and is_tf_legacy:
+                for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
+                    config_options += f'\n    {legacy_endpoint} = "{default_config[key][endpoint]}"'
+                continue
+            else:
+                joined_values = "\n".join([f'  {k} = "{v}"' for k, v in value.items()])
+                value = textwrap.indent(
+                    text=f"{key} = {{\n{joined_values}\n}}",
+                    prefix=" " * 4,
+                )
+                config_options += f"\n{value}"
+                continue
+        elif isinstance(value, list):
+            # TODO this will break if it's a list of dicts or other complex object
+            # this serialization logic should probably be moved to a separate recursive function
+            as_string = [f'"{item}"' for item in value]
+            value = f"[{', '.join(as_string)}]"
+        else:
+            value = f'"{str(value)}"'
+        config_options += f"\n    {key} = {value}"
+
+    return config_options
+
+
 def check_override_file(providers_file: str) -> None:
-    """Checks override file existance"""
+    """Checks override file existence"""
     if os.path.exists(providers_file):
         msg = f"Providers override file {providers_file} already exists"
         err_msg = msg + " - please delete it first, exiting..."
