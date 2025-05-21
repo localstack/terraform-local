@@ -405,7 +405,10 @@ def _generate_s3_backend_config(backend_config: Dict, default_config: Dict) -> s
 
     # Add any missing default endpoints
     if backend_config.get("endpoints"):
-        default_config["endpoints"].update(backend_config["endpoints"])
+        backend_config["endpoints"] = {
+            k: backend_config["endpoints"].get(k) or v
+            for k, v in default_config["endpoints"].items()
+        }
 
     backend_config["access_key"] = (
         get_access_key(backend_config) if CUSTOMIZE_ACCESS_KEY else DEFAULT_ACCESS_KEY

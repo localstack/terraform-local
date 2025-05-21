@@ -370,7 +370,7 @@ def test_dry_run(monkeypatch):
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert check_override_file_exists(override_file)
 
-    assert check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
+    check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -501,7 +501,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
-        assert check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
+        check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
         rmtree(temp_dir)
 
 
@@ -510,19 +510,19 @@ def check_override_file_exists(override_file):
 
 
 def check_override_file_backend_endpoints_content(override_file, is_legacy: bool = False):
-    legacy_options = (
+    legacy_options = {
         "endpoint",
         "iam_endpoint",
         "dynamodb_endpoint",
         "sts_endpoint",
-    )
-    new_options = (
+    }
+    new_options = {
         "iam",
         "dynamodb",
         "s3",
         "sso",
         "sts",
-    )
+    }
     try:
         with open(override_file, "r") as fp:
             result = hcl2.load(fp)
@@ -530,14 +530,14 @@ def check_override_file_backend_endpoints_content(override_file, is_legacy: bool
     except Exception as e:
         print(f'Unable to parse "{override_file}" as HCL file: {e}')
 
-    new_options_check = "endpoints" in result and all(map(lambda x: x in result.get("endpoints"), new_options))
-
     if is_legacy:
-        legacy_options_check = all(map(lambda x: x in result, legacy_options))
-        return not new_options_check and legacy_options_check
+        assert "endpoints" not in result
+        assert legacy_options <= set(result)
 
-    legacy_options_check = any(map(lambda x: x in result, legacy_options))
-    return new_options_check and not legacy_options_check
+    else:
+        assert "endpoints" in result
+        assert new_options <= set(result["endpoints"])
+        assert not legacy_options & set(result)
 
 
 def test_provider_aliases_ignored(monkeypatch):
