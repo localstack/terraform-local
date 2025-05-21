@@ -18,7 +18,7 @@ import textwrap
 
 from packaging import version
 from urllib.parse import urlparse
-from typing import Iterable, Optional, Dict
+from typing import Iterable, Optional, Dict, Tuple
 
 PARENT_FOLDER = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
@@ -288,33 +288,16 @@ def generate_s3_backend_config() -> str:
     if not s3_backend_config:
         return ""
 
-    backend_default_config = {
-        # note: default values, updated by `backend_config` further below...
-        "bucket": "tf-test-state",
-        "key": "terraform.tfstate",
-        "region": get_region(),
-        "skip_credentials_validation": True,
-        "skip_metadata_api_check": True,
-        "secret_key": "test",
-        "endpoints": {
-            "s3": get_service_endpoint("s3"),
-            "iam": get_service_endpoint("iam"),
-            "sso": get_service_endpoint("sso"),
-            "sts": get_service_endpoint("sts"),
-            "dynamodb": get_service_endpoint("dynamodb"),
-        },
-    }
-
-    config_options = _generate_s3_backend_config(s3_backend_config, backend_default_config)
+    config_values, config_string = _generate_s3_backend_config(s3_backend_config)
     if not DRY_RUN:
-        get_or_create_bucket(backend_default_config["bucket"])
-        if "dynamodb_table" in backend_default_config:
+        get_or_create_bucket(config_values["bucket"])
+        if "dynamodb_table" in config_values:
             get_or_create_ddb_table(
-                backend_default_config["dynamodb_table"],
-                region=backend_default_config["region"],
+                config_values["dynamodb_table"],
+                region=config_values["region"],
             )
 
-    result = TF_S3_BACKEND_CONFIG.replace("<configs>", config_options)
+    result = TF_S3_BACKEND_CONFIG.replace("<configs>", config_string)
     return result
 
 
@@ -349,42 +332,43 @@ def generate_remote_state_config() -> str:
                         workspace = f'"{workspace}"'
                     workspace = f"workspace = {workspace}"
 
-                # Set up default configs
-                remote_state_default_config = {
-                    "bucket": "tf-test-state",
-                    "key": "terraform.tfstate",
-                    "region": get_region(),
-                    "skip_credentials_validation": True,
-                    "skip_metadata_api_check": True,
-                    "secret_key": "test",
-                    "endpoints": {
-                        "s3": get_service_endpoint("s3"),
-                        "iam": get_service_endpoint("iam"),
-                        "sso": get_service_endpoint("sso"),
-                        "sts": get_service_endpoint("sts"),
-                    },
-                }
-
-                config_options = _generate_s3_backend_config(backend_config, remote_state_default_config)
+                _, config_str = _generate_s3_backend_config(backend_config)
 
                 # Create the final config
                 remote_state_config = TF_REMOTE_STATE_CONFIG.replace(
                     "<name>", data_name
                 ) \
-                    .replace("<configs>", config_options) \
+                    .replace("<configs>", config_str) \
                     .replace("<workspace-placeholder>", workspace)
                 result += remote_state_config
 
     return result
 
 
-def _generate_s3_backend_config(backend_config: Dict, default_config: Dict) -> str:
+def _generate_s3_backend_config(backend_config: Dict) -> Tuple[Dict, str]:
     is_tf_legacy = TF_VERSION < version.Version("1.6")
     legacy_endpoint_mappings = {
         "endpoint": "s3",
         "iam_endpoint": "iam",
         "sts_endpoint": "sts",
         "dynamodb_endpoint": "dynamodb",
+    }
+
+    # Set up default config
+    default_config = {
+        "bucket": "tf-test-state",
+        "key": "terraform.tfstate",
+        "region": get_region(),
+        "skip_credentials_validation": True,
+        "skip_metadata_api_check": True,
+        "secret_key": "test",
+        "endpoints": {
+            "s3": get_service_endpoint("s3"),
+            "iam": get_service_endpoint("iam"),
+            "sso": get_service_endpoint("sso"),
+            "sts": get_service_endpoint("sts"),
+            "dynamodb": get_service_endpoint("dynamodb"),
+        },
     }
 
     # Merge in legacy endpoint configs if not existing already
