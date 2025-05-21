@@ -343,6 +343,53 @@ def test_s3_remote_data_source():
     assert get_obj["Body"].read() == b"test"
 
 
+def test_s3_remote_data_source_with_workspace(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    state_bucket = f"tf-data-source-{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-1"
+        skip_credentials_validation = true
+      }
+    }
+
+    data "terraform_remote_state" "terraform_infra" {
+      backend   = "s3"
+      workspace = terraform.workspace
+
+      config = {
+        bucket               = "<state-bucket>"
+        workspace_key_prefix = "terraform-infrastructure/place"
+        key                  = "terraform.tfstate"
+      }
+    }
+
+    data "terraform_remote_state" "build_infra" {
+      backend   = "s3"
+      workspace = "build"
+
+      config = {
+        bucket               = "<state-bucket>"
+        workspace_key_prefix = "terraform-infrastructure"
+        key                  = "terraform.tfstate"
+      }
+    }
+
+    """.replace("<state-bucket>", state_bucket)
+
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert check_override_file_exists(override_file)
+
+    with open(override_file, "r") as fp:
+        result = hcl2.load(fp)
+        assert result["data"][0]["terraform_remote_state"]["terraform_infra"]["workspace"] == "${terraform.workspace}"
+        assert result["data"][1]["terraform_remote_state"]["build_infra"]["workspace"] == "build"
+
+
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"

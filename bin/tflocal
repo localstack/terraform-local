@@ -78,6 +78,7 @@ terraform {
 TF_REMOTE_STATE_CONFIG = """
 data "terraform_remote_state" "<name>" {
   backend = "s3"
+  <workspace-placeholder>
   config = {<configs>
   }
 }
@@ -324,7 +325,6 @@ def generate_remote_state_config() -> str:
     """
 
     tf_files = parse_tf_files()
-
     result = ""
     for filename, obj in tf_files.items():
         if LS_PROVIDERS_FILE == filename:
@@ -341,6 +341,13 @@ def generate_remote_state_config() -> str:
                 backend_config = data_config.get("config", {})
                 if not backend_config:
                     continue
+                workspace = data_config.get("workspace", "")
+                if workspace:
+                    if workspace[0] == "$":
+                        workspace = workspace.lstrip('${').rstrip('}')
+                    else:
+                        workspace = f'"{workspace}"'
+                    workspace = f"workspace = {workspace}"
 
                 # Set up default configs
                 remote_state_default_config = {
@@ -363,7 +370,9 @@ def generate_remote_state_config() -> str:
                 # Create the final config
                 remote_state_config = TF_REMOTE_STATE_CONFIG.replace(
                     "<name>", data_name
-                ).replace("<configs>", config_options)
+                ) \
+                    .replace("<configs>", config_options) \
+                    .replace("<workspace-placeholder>", workspace)
                 result += remote_state_config
 
     return result
