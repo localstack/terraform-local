@@ -410,14 +410,14 @@ def _generate_s3_backend_config(backend_config: Dict) -> Tuple[Dict, str]:
     # Update with user-provided configs
     default_config.update(backend_config)
     # Generate config string
-    config_options = ""
+    config_string = ""
     for key, value in sorted(default_config.items()):
         if isinstance(value, bool):
             value = str(value).lower()
         elif isinstance(value, dict):
             if key == "endpoints" and is_tf_legacy:
                 for legacy_endpoint, endpoint in legacy_endpoint_mappings.items():
-                    config_options += f'\n    {legacy_endpoint} = "{default_config[key][endpoint]}"'
+                    config_string += f'\n    {legacy_endpoint} = "{default_config[key][endpoint]}"'
                 continue
             else:
                 joined_values = "\n".join([f'  {k} = "{v}"' for k, v in value.items()])
@@ -425,7 +425,7 @@ def _generate_s3_backend_config(backend_config: Dict) -> Tuple[Dict, str]:
                     text=f"{key} = {{\n{joined_values}\n}}",
                     prefix=" " * 4,
                 )
-                config_options += f"\n{value}"
+                config_string += f"\n{value}"
                 continue
         elif isinstance(value, list):
             # TODO this will break if it's a list of dicts or other complex object
@@ -434,9 +434,9 @@ def _generate_s3_backend_config(backend_config: Dict) -> Tuple[Dict, str]:
             value = f"[{', '.join(as_string)}]"
         else:
             value = f'"{str(value)}"'
-        config_options += f"\n    {key} = {value}"
+        config_string += f"\n    {key} = {value}"
 
-    return config_options
+    return default_config, config_string
 
 
 def check_override_file(providers_file: str) -> None:
