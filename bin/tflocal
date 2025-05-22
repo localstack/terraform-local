@@ -269,9 +269,9 @@ def generate_s3_backend_config() -> str:
             continue
         tf_configs = ensure_list(obj.get("terraform", []))
         for tf_config in tf_configs:
-            backend_config = ensure_list(tf_config.get("backend"))
-            if backend_config:
-                backend_config = backend_config[0]
+            tmp_backend_config = ensure_list(tf_config.get("backend"))
+            if tmp_backend_config[0]:
+                backend_config = tmp_backend_config[0]
                 break
     backend_config = backend_config and backend_config.get("s3")
     if not backend_config:
