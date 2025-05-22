@@ -205,6 +205,47 @@ def test_s3_backend():
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
+def test_s3_backend_with_multiple_backends_in_files():
+    state_bucket = f"tf-state-{short_uid()}"
+    bucket_name = f"bucket-{short_uid()}"
+    config_main = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-2"
+        skip_credentials_validation = true
+      }
+    }
+    resource "aws_s3_bucket" "test-bucket" {
+      bucket = "%s"
+    }
+    """ % (state_bucket, bucket_name)
+
+    config_other_file = """
+    terraform {}
+    """
+
+    # we manually need to add different files and create them to verify the fix
+    with tempfile.TemporaryDirectory(delete=True) as temp_dir:
+        with (
+            open(os.path.join(temp_dir, "test.tf"), "w") as f,
+            open(os.path.join(temp_dir, "test_2.tf"), "w") as f2,
+        ):
+            f.write(config_main)
+            f2.write(config_other_file)
+
+        kwargs = {"cwd": temp_dir, "env": dict(os.environ)}
+        run([TFLOCAL_BIN, "init"], **kwargs)
+        run([TFLOCAL_BIN, "apply", "-auto-approve"], **kwargs)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name="us-east-2")
+    result = s3.list_objects(Bucket=state_bucket)
+    keys = [obj["Key"] for obj in result["Contents"]]
+    assert "terraform.tfstate" in keys
+
+
 def test_s3_backend_state_lock_default():
     state_bucket = f"tf-state-{short_uid()}"
     bucket_name = f"bucket-{short_uid()}"
@@ -242,6 +283,113 @@ def test_s3_backend_state_lock_default():
     assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
+def test_s3_remote_data_source():
+    state_bucket = f"tf-data-source-{short_uid()}"
+    bucket_name = f"bucket-{short_uid()}"
+    object_key = f"obj-{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-1"
+        skip_credentials_validation = true
+      }
+    }
+
+    resource "aws_s3_bucket" "test_bucket" {
+      bucket = "%s"
+    }
+
+    output "bucket_name" {
+        value = aws_s3_bucket.test_bucket.bucket
+    }
+    """ % (state_bucket, bucket_name)
+    deploy_tf_script(config)
+
+    # assert that bucket with state file exists
+    s3 = client("s3", region_name="us-east-2")
+    result = s3.list_objects(Bucket=state_bucket)
+    keys = [obj["Key"] for obj in result["Contents"]]
+    assert "terraform.tfstate" in keys
+
+    # assert that S3 resource has been created
+    s3 = client("s3")
+    result = s3.head_bucket(Bucket=bucket_name)
+    assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    # now deploy the part that needs the S3 remote state
+    config += """
+    data "terraform_remote_state" "remote_data" {
+      backend = "s3"
+
+      config = {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region  = "us-east-1"
+      }
+    }
+
+    resource "aws_s3_object" "foo" {
+        bucket = data.terraform_remote_state.remote_data.outputs.bucket_name
+        key    = "%s"
+        content = "test"
+    }
+
+    """ % (state_bucket, object_key)
+    deploy_tf_script(config)
+
+    get_obj = s3.get_object(Bucket=bucket_name, Key=object_key)
+    assert get_obj["Body"].read() == b"test"
+
+
+def test_s3_remote_data_source_with_workspace(monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    state_bucket = f"tf-data-source-{short_uid()}"
+    config = """
+    terraform {
+      backend "s3" {
+        bucket = "%s"
+        key    = "terraform.tfstate"
+        region = "us-east-1"
+        skip_credentials_validation = true
+      }
+    }
+
+    data "terraform_remote_state" "terraform_infra" {
+      backend   = "s3"
+      workspace = terraform.workspace
+
+      config = {
+        bucket               = "<state-bucket>"
+        workspace_key_prefix = "terraform-infrastructure/place"
+        key                  = "terraform.tfstate"
+      }
+    }
+
+    data "terraform_remote_state" "build_infra" {
+      backend   = "s3"
+      workspace = "build"
+
+      config = {
+        bucket               = "<state-bucket>"
+        workspace_key_prefix = "terraform-infrastructure"
+        key                  = "terraform.tfstate"
+      }
+    }
+
+    """.replace("<state-bucket>", state_bucket)
+
+    temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
+    override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+    assert check_override_file_exists(override_file)
+
+    with open(override_file, "r") as fp:
+        result = hcl2.load(fp)
+        assert result["data"][0]["terraform_remote_state"]["terraform_infra"]["workspace"] == "${terraform.workspace}"
+        assert result["data"][1]["terraform_remote_state"]["build_infra"]["workspace"] == "build"
+
+
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
@@ -269,7 +417,7 @@ def test_dry_run(monkeypatch):
     override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
     assert check_override_file_exists(override_file)
 
-    assert check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
+    check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
 
     # assert that bucket with state file exists
     s3 = client("s3", region_name="us-east-2")
@@ -400,7 +548,7 @@ def test_s3_backend_endpoints_merge(monkeypatch, endpoints: str):
         temp_dir = deploy_tf_script(config, cleanup=False, user_input="yes")
         override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
         assert check_override_file_exists(override_file)
-        assert check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
+        check_override_file_backend_endpoints_content(override_file, is_legacy=is_legacy_tf)
         rmtree(temp_dir)
 
 
@@ -409,19 +557,19 @@ def check_override_file_exists(override_file):
 
 
 def check_override_file_backend_endpoints_content(override_file, is_legacy: bool = False):
-    legacy_options = (
+    legacy_options = {
         "endpoint",
         "iam_endpoint",
         "dynamodb_endpoint",
         "sts_endpoint",
-    )
-    new_options = (
+    }
+    new_options = {
         "iam",
         "dynamodb",
         "s3",
         "sso",
         "sts",
-    )
+    }
     try:
         with open(override_file, "r") as fp:
             result = hcl2.load(fp)
@@ -429,14 +577,14 @@ def check_override_file_backend_endpoints_content(override_file, is_legacy: bool
     except Exception as e:
         print(f'Unable to parse "{override_file}" as HCL file: {e}')
 
-    new_options_check = "endpoints" in result and all(map(lambda x: x in result.get("endpoints"), new_options))
-
     if is_legacy:
-        legacy_options_check = all(map(lambda x: x in result, legacy_options))
-        return not new_options_check and legacy_options_check
+        assert "endpoints" not in result
+        assert legacy_options <= set(result)
 
-    legacy_options_check = any(map(lambda x: x in result, legacy_options))
-    return new_options_check and not legacy_options_check
+    else:
+        assert "endpoints" in result
+        assert new_options <= set(result["endpoints"])
+        assert not legacy_options & set(result)
 
 
 def test_provider_aliases_ignored(monkeypatch):
