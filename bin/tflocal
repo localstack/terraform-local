@@ -56,7 +56,7 @@ LOCALSTACK_HOSTNAME = (
     or "localhost"
 )
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
-AWS_PROVIDER_NAME = "registry.terraform.io/hashicorp/aws"
+AWS_PROVIDER_NAME_SUFFIX = "/hashicorp/aws"
 AWS_PROVIDER_VERSION: Optional[version.Version] = None
 TF_VERSION: Optional[version.Version] = None
 TF_PROVIDER_CONFIG = """
@@ -630,7 +630,7 @@ def get_provider_version_from_lock_file() -> Optional[version.Version]:
         result = hcl2.load(fp)
         for provider in result.get("provider", []):
             for provider_name, provider_config in provider.items():
-                if provider_name == 'registry.terraform.io/hashicorp/aws':
+                if provider_name.endswith(AWS_PROVIDER_NAME_SUFFIX):
                     provider_version = provider_config.get("version")
 
     if provider_version:
