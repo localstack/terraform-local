@@ -402,7 +402,7 @@ def test_versioned_endpoints(monkeypatch, provider_version):
         }
       }
     }
-    
+
     provider "aws" {
       region                   = "us-east-1"
       access_key               = "test"
@@ -414,7 +414,7 @@ def test_versioned_endpoints(monkeypatch, provider_version):
         sns = "http://localhost:4566"
       }
     }
-    
+
     resource "aws_sns_topic" "example" {
       name = "%s"
     }
