@@ -390,6 +390,60 @@ def test_s3_remote_data_source_with_workspace(monkeypatch):
         assert result["data"][1]["terraform_remote_state"]["build_infra"]["workspace"] == "build"
 
 
+@pytest.mark.parametrize("provider_version", ["5.99.1", "6.0.0-beta2"])
+def test_versioned_endpoints(monkeypatch, provider_version):
+    sns_topic_name = f"test-topic-{short_uid()}"
+    config = """
+    terraform {
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = "= %s"
+        }
+      }
+    }
+    
+    provider "aws" {
+      region                   = "us-east-1"
+      access_key               = "test"
+      secret_key               = "test"
+      skip_credentials_validation = true
+      skip_metadata_api_check   = true
+      skip_requesting_account_id = true
+      endpoints {
+        sns = "http://localhost:4566"
+      }
+    }
+    
+    resource "aws_sns_topic" "example" {
+      name = "%s"
+    }
+    """ % (provider_version, sns_topic_name)
+
+    with tempfile.TemporaryDirectory(delete=True) as temp_dir:
+        with open(os.path.join(temp_dir, "test.tf"), "w") as f:
+            f.write(config)
+
+        # we need the `terraform init` command to create a lock file, so it cannot be a `DRY_RUN`
+        run([TFLOCAL_BIN, "init"], cwd=temp_dir, env=dict(os.environ))
+        monkeypatch.setenv("DRY_RUN", "1")
+        run([TFLOCAL_BIN, "apply", "-auto-approve"], cwd=temp_dir, env=dict(os.environ))
+
+        override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+        assert check_override_file_exists(override_file)
+
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            endpoints = result["provider"][0]["aws"]["endpoints"][0]
+            if provider_version == "5.99.1":
+                assert "iotanalytics" in endpoints
+                assert "iotevents" in endpoints
+            else:
+                # we add this assertion to be sure, but Terraform wouldn't deploy with them
+                assert "iotanalytics" not in endpoints
+                assert "iotevents" not in endpoints
+
+
 def test_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "1")
     state_bucket = "tf-state-dry-run"
@@ -638,8 +692,14 @@ def get_version():
     return version.parse(json.loads(output)["terraform_version"])
 
 
-def deploy_tf_script(script: str, cleanup: bool = True, env_vars: Dict[str, str] = None, user_input: str = None):
-    # TODO the delete keyword was added in python 3.12, and the README and setup.cfg claims compatibility with earlier python versions
+def deploy_tf_script(
+    script: str,
+    cleanup: bool = True,
+    env_vars: Dict[str, str] = None,
+    user_input: str = None,
+):
+    # TODO the delete keyword was added in python 3.12, and the README and setup.cfg claims compatibility
+    #  with earlier python versions
     with tempfile.TemporaryDirectory(delete=cleanup) as temp_dir:
         with open(os.path.join(temp_dir, "test.tf"), "w") as f:
             f.write(script)

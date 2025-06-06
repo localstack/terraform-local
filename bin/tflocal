@@ -56,6 +56,8 @@ LOCALSTACK_HOSTNAME = (
     or "localhost"
 )
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
+AWS_PROVIDER_NAME = "registry.terraform.io/hashicorp/aws"
+AWS_PROVIDER_VERSION: Optional[version.Version] = None
 TF_VERSION: Optional[version.Version] = None
 TF_PROVIDER_CONFIG = """
 provider "aws" {
@@ -128,6 +130,15 @@ SERVICE_ALIASES = [
 ]
 # service names to be excluded (not yet available in TF)
 SERVICE_EXCLUSIONS = ["meteringmarketplace"]
+
+# we can exclude some service endpoints based on the AWS provider version
+# those limits are exclusive, meaning 6.0.0b2 is the first version to fail with those endpoints, so only a lower version
+# will have that setting
+VERSIONED_SERVICE_EXCLUSIONS = {
+    "iotanalytics": {"min": version.Version("0"), "max": version.Version("6.0.0b2")},
+    "iotevents": {"min": version.Version("0"), "max": version.Version("6.0.0b2")},
+}
+
 # maps services to be replaced with alternative names
 # skip services which do not have equivalent endpoint overrides
 # see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints
@@ -173,7 +184,8 @@ def create_provider_config_file(provider_file_path: str, provider_aliases=None) 
 
     # create list of service names
     services = list(config.get_service_ports())
-    services = [srvc for srvc in services if srvc not in SERVICE_EXCLUSIONS]
+    services = [srvc for srvc in services if srvc not in SERVICE_EXCLUSIONS and is_service_endpoint_supported(srvc)]
+
     services = [s.replace("-", "") for s in services]
     for old, new in SERVICE_REPLACEMENTS.items():
         try:
@@ -606,6 +618,33 @@ def get_tf_version(env):
     TF_VERSION = version.parse(json.loads(output)["terraform_version"])
 
 
+def get_provider_version_from_lock_file() -> Optional[version.Version]:
+    global AWS_PROVIDER_VERSION
+    lock_file = os.path.join(get_default_provider_folder_path(), ".terraform.lock.hcl")
+
+    if not os.path.exists(lock_file):
+        return
+
+    provider_version = None
+    with open(lock_file, "r") as fp:
+        result = hcl2.load(fp)
+        for provider in result.get("provider", []):
+            for provider_name, provider_config in provider.items():
+                if provider_name == 'registry.terraform.io/hashicorp/aws':
+                    provider_version = provider_config.get("version")
+
+    if provider_version:
+        AWS_PROVIDER_VERSION = version.parse(provider_version)
+
+
+def is_service_endpoint_supported(service_name: str) -> bool:
+    if service_name not in VERSIONED_SERVICE_EXCLUSIONS or not AWS_PROVIDER_VERSION:
+        return True
+
+    supported_versions = VERSIONED_SERVICE_EXCLUSIONS[service_name]
+    return supported_versions["min"] < AWS_PROVIDER_VERSION < supported_versions["max"]
+
+
 def run_tf_exec(cmd, env):
     """Run terraform using os.exec - can be useful as it does not require any I/O
     handling for stdin/out/err. Does *not* allow us to perform any cleanup logic."""
@@ -685,6 +724,9 @@ def main():
     except (FileNotFoundError, ValueError) as e:
         print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
+
+    if len(sys.argv) > 1 and sys.argv[1] != "init":
+        get_provider_version_from_lock_file()
 
     config_override_files = []
 
