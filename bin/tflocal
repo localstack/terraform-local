@@ -640,6 +640,11 @@ def get_provider_version_from_lock_file() -> Optional[version.Version]:
         AWS_PROVIDER_VERSION = version.parse(provider_version)
 
 
+def get_tf_local_version():
+    from importlib.metadata import version
+    return version("terraform-local")
+
+
 def is_service_endpoint_supported(service_name: str) -> bool:
     if service_name not in VERSIONED_SERVICE_EXCLUSIONS or not AWS_PROVIDER_VERSION:
         return True
@@ -728,8 +733,17 @@ def main():
         print(f"Unable to determine version. See error message for details: {e}")
         exit(1)
 
-    if len(sys.argv) > 1 and sys.argv[1] != "init":
-        get_provider_version_from_lock_file()
+    if len(sys.argv) > 1:
+        if sys.argv[1] != "init":
+            get_provider_version_from_lock_file()
+        if sys.argv[1] in ("--version", "-v", "-version"):
+            try:
+                # the version flag could be something else than the 1st argument, it is possible to do
+                # `terraform init -version` and it will return the version only without init, but we should probably
+                # only support the easy case
+                print(f"terraform-local v{get_tf_local_version()}", file=sys.stderr)
+            except Exception:
+                pass
 
     config_override_files = []
 
