@@ -681,7 +681,6 @@ def test_version_command(monkeypatch, version_flag):
         return subprocess.check_output(cmd, **kwargs)
 
     with tempfile.TemporaryDirectory(delete=True) as temp_dir:
-        # we need the `terraform init` command to create a lock file, so it cannot be a `DRY_RUN`
         output = _run([TFLOCAL_BIN, version_flag], cwd=temp_dir, env=dict(os.environ))
         assert b"terraform-local v" in output
 
