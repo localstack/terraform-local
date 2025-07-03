@@ -77,6 +77,7 @@ ADDITIONAL_TF_OVERRIDE_LOCATIONS=/path/to/module1,path/to/module2 tflocal plan
 
 ## Change Log
 
+* v0.24.0: Add support to return `terraform-local` version when calling `tflocal -version` and fix AWS provider detection
 * v0.23.1: Fix endpoint overrides for Terraform AWS provider >= 6.0.0-beta2
 * v0.23.0: Add support for `terraform_remote_state` with `s3` backend to read the state stored in local S3 backend; fix S3 backend config detection with multiple Terraform blocks
 * v0.22.0: Fix S3 backend forcing DynamoDB State Lock to be enabled by default
