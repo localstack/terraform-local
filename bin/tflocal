@@ -634,6 +634,9 @@ def get_provider_version_from_lock_file() -> Optional[version.Version]:
                     provider_version = provider_config.get("version")
 
     if provider_version:
+        # Patch: handle case where version is a list
+        if isinstance(provider_version, list):
+            provider_version = provider_version[0]
         AWS_PROVIDER_VERSION = version.parse(provider_version)
 
 
