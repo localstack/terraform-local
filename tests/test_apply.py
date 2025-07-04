@@ -674,6 +674,22 @@ def check_override_file_content_for_alias(override_file):
     return True
 
 
+@pytest.mark.parametrize("version_flag", ["--version", "-v", "-version"])
+def test_version_command(monkeypatch, version_flag):
+    def _run(cmd, **kwargs):
+        kwargs["stderr"] = subprocess.STDOUT
+        return subprocess.check_output(cmd, **kwargs)
+
+    with tempfile.TemporaryDirectory(delete=True) as temp_dir:
+        output = _run([TFLOCAL_BIN, version_flag], cwd=temp_dir, env=dict(os.environ))
+        assert b"terraform-local v" in output
+
+        monkeypatch.setenv("DRY_RUN", "1")
+        output = _run([TFLOCAL_BIN, version_flag], cwd=temp_dir, env=dict(os.environ))
+
+        assert b"terraform-local v" in output
+
+
 ###
 # UTIL FUNCTIONS
 ###
