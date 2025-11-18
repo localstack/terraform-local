@@ -7,7 +7,7 @@ This package provides `tflocal` - a small wrapper script to run [Terraform](http
 ## Prerequisites
 
 * Python 3.x
-* `pip`
+* `pip` or `pipx`
 * `terraform`
 
 ## How it works
@@ -16,10 +16,51 @@ The script uses the [Terraform Override mechanism](https://www.terraform.io/lang
 
 ## Installation
 
-The `tflocal` command line interface can be installed via `pip`:
+The recommended way to install tflocal is using pipx, which installs Python CLI tools in their own isolated environments. This avoids conflicts with system packages and the externally-managed-environment error (PEP 668) seen on modern Linux distributions.
+
+##### 1) Recommended: Using pipx
+
+    
+First, ensure pipx is installed.
+
+On Debian/Ubuntu:
+
+```
+sudo apt install pipx
+```
+Or, using pip (for other systems):
+
+```
+pip install --user pipx
+```
+Then, run pipx ensurepath to add pipx's binaries to your system's PATH. You may need to restart your shell for this to take effect.
+
+#### Install tflocal with pipx:
+Bash
+
+pipx install terraform-local
+
+To upgrade tflocal in the future, run: pipx upgrade terraform-local.
+
+##### 2) Alternative: Using a Virtual Environment
+
+If you prefer not to use pipx, you can install tflocal into a standard Python virtual environment (venv):
+Bash
+
+# Create a virtual environment (e.g., in your project directory)
+```
+python3 -m venv .venv
+```
+# Activate it
+```
+source .venv/bin/activate
+```
+# Install the package
 ```
 pip install terraform-local
 ```
+
+# Note: You must activate this venv (source .venv/bin/activate) every time you want to use the tflocal command.
 
 ## Configurations
 
