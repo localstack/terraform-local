@@ -77,6 +77,7 @@ ADDITIONAL_TF_OVERRIDE_LOCATIONS=/path/to/module1,path/to/module2 tflocal plan
 
 ## Change Log
 
+* v0.25.0: Improve `s3control` local endpoint override and respect `AWS_ENDPOINT_URL` configuration for `mwaa`
 * v0.24.1: Exclude broken `python-hcl2` version from requirements
 * v0.24.0: Add support to return `terraform-local` version when calling `tflocal -version` and fix AWS provider detection
 * v0.23.1: Fix endpoint overrides for Terraform AWS provider >= 6.0.0-beta2
