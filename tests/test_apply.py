@@ -409,7 +409,6 @@ def test_versioned_endpoints(monkeypatch, provider_version):
       secret_key               = "test"
       skip_credentials_validation = true
       skip_metadata_api_check   = true
-      skip_requesting_account_id = true
       endpoints {
         sns = "http://localhost:4566"
       }
@@ -442,6 +441,69 @@ def test_versioned_endpoints(monkeypatch, provider_version):
                 # we add this assertion to be sure, but Terraform wouldn't deploy with them
                 assert "iotanalytics" not in endpoints
                 assert "iotevents" not in endpoints
+
+
+@pytest.mark.parametrize("localstack_hostname", ["", "test-host"])
+def test_subdomain_endpoints(monkeypatch, localstack_hostname):
+    monkeypatch.setenv("LOCALSTACK_HOSTNAME", localstack_hostname)
+    monkeypatch.setenv("EDGE_PORT", "4566")
+    bucket_name = f"bucket-{short_uid()}"
+    config = """
+    terraform {
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = ">= 6.23"
+        }
+      }
+    }
+
+    provider "aws" {
+      region                   = "us-east-1"
+      access_key               = "test"
+      secret_key               = "test"
+      skip_credentials_validation = true
+      skip_metadata_api_check   = true
+    }
+
+    resource "aws_s3_bucket" "example" {
+      name = "%s"
+    }
+    """ % bucket_name
+
+    with tempfile.TemporaryDirectory(delete=True) as temp_dir:
+        with open(os.path.join(temp_dir, "test.tf"), "w") as f:
+            f.write(config)
+
+        # we need the `terraform init` command to create a lock file, so it cannot be a `DRY_RUN`
+        run([TFLOCAL_BIN, "init"], cwd=temp_dir, env=dict(os.environ))
+        monkeypatch.setenv("DRY_RUN", "1")
+        run([TFLOCAL_BIN, "apply", "-auto-approve"], cwd=temp_dir, env=dict(os.environ))
+
+        override_file = os.path.join(temp_dir, "localstack_providers_override.tf")
+        assert check_override_file_exists(override_file)
+
+        with open(override_file, "r") as fp:
+            result = hcl2.load(fp)
+            endpoints = result["provider"][0]["aws"]["endpoints"][0]
+            assert "s3control" in endpoints
+            assert "mwaa" in endpoints
+
+            if localstack_hostname == "":
+                # we assert that if the `LOCALSTACK_HOSTNAME` isn't set, the default endpooint value is `localhost`
+                assert endpoints["sns"] == "http://localhost:4566"
+                # the MWAA endpoint needs to be "subdomain resolvable", so we override it with the default localhost
+                # localstack hostname
+                assert endpoints["mwaa"] == "http://mwaa.localhost.localstack.cloud:4566"
+                # s3 control will set the account id of the requested as a host prefix, so we also need a subdomain
+                # compatible host
+                assert endpoints["s3control"] == "http://localhost.localstack.cloud:4566"
+            else:
+                # if the user is manipulating the `LOCALSTACK_HOSTNAME`, they are responsible to make sure that the
+                # domain they set is subdomain compatible, so we respect their configuration
+                assert endpoints["sns"] == f"http://{localstack_hostname}:4566"
+                assert endpoints["mwaa"] == f"http://mwaa.{localstack_hostname}:4566"
+                assert endpoints["s3control"] == f"http://{localstack_hostname}:4566"
 
 
 def test_dry_run(monkeypatch):
