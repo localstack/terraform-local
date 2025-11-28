@@ -443,10 +443,12 @@ def test_versioned_endpoints(monkeypatch, provider_version):
                 assert "iotevents" not in endpoints
 
 
-@pytest.mark.parametrize("localstack_hostname", ["", "test-host"])
-def test_subdomain_endpoints(monkeypatch, localstack_hostname):
-    monkeypatch.setenv("LOCALSTACK_HOSTNAME", localstack_hostname)
-    monkeypatch.setenv("EDGE_PORT", "4566")
+@pytest.mark.parametrize("endpoint_host", ["", "test-host"])
+def test_subdomain_endpoints(monkeypatch, endpoint_host):
+    # we are using the `AWS_ENDPOINT_URL`, but setting the `LOCALSTACK_HOSTNAME` and `EDGE_PORT` (both deprecated)
+    # would have the same behavior
+    aws_endpoint_url = f"http://{endpoint_host}:4566" if endpoint_host else ""
+    monkeypatch.setenv("AWS_ENDPOINT_URL", aws_endpoint_url)
     bucket_name = f"bucket-{short_uid()}"
     config = """
     terraform {
@@ -489,7 +491,7 @@ def test_subdomain_endpoints(monkeypatch, localstack_hostname):
             assert "s3control" in endpoints
             assert "mwaa" in endpoints
 
-            if localstack_hostname == "":
+            if aws_endpoint_url == "":
                 # we assert that if the `LOCALSTACK_HOSTNAME` isn't set, the default endpooint value is `localhost`
                 assert endpoints["sns"] == "http://localhost:4566"
                 # the MWAA endpoint needs to be "subdomain resolvable", so we override it with the default localhost
@@ -501,9 +503,9 @@ def test_subdomain_endpoints(monkeypatch, localstack_hostname):
             else:
                 # if the user is manipulating the `LOCALSTACK_HOSTNAME`, they are responsible to make sure that the
                 # domain they set is subdomain compatible, so we respect their configuration
-                assert endpoints["sns"] == f"http://{localstack_hostname}:4566"
-                assert endpoints["mwaa"] == f"http://mwaa.{localstack_hostname}:4566"
-                assert endpoints["s3control"] == f"http://{localstack_hostname}:4566"
+                assert endpoints["sns"] == f"http://{endpoint_host}:4566"
+                assert endpoints["mwaa"] == f"http://mwaa.{endpoint_host}:4566"
+                assert endpoints["s3control"] == f"http://{endpoint_host}:4566"
 
 
 def test_dry_run(monkeypatch):
