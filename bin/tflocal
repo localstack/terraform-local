@@ -35,6 +35,7 @@ CUSTOMIZE_ACCESS_KEY = str(os.environ.get("CUSTOMIZE_ACCESS_KEY")).strip().lower
     "1",
     "true",
 ]
+LOCALHOST = "localhost"
 LOCALHOST_HOSTNAME = "localhost.localstack.cloud"
 S3_HOSTNAME = os.environ.get("S3_HOSTNAME") or f"s3.{LOCALHOST_HOSTNAME}"
 USE_EXEC = str(os.environ.get("USE_EXEC")).strip().lower() in ["1", "true"]
@@ -53,7 +54,7 @@ LS_PROVIDERS_FILE = (
 LOCALSTACK_HOSTNAME = (
     urlparse(AWS_ENDPOINT_URL).hostname
     or os.environ.get("LOCALSTACK_HOSTNAME")
-    or "localhost"
+    or LOCALHOST
 )
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
 AWS_PROVIDER_NAME_SUFFIX = "/hashicorp/aws"
@@ -541,10 +542,16 @@ def get_service_endpoint(service: str) -> str:
 
     # some services need specific hostnames
     hostname = LOCALSTACK_HOSTNAME
+    # if the user has not set the LOCALSTACK_HOSTNAME, and it fell back to `localhost`, we must force the endpoint to
+    # be make sure it can resolve subdomains
+    subdomain_compatible_endpoint = LOCALHOST_HOSTNAME if hostname == LOCALHOST else hostname
     if service == "s3":
         hostname = S3_HOSTNAME
     elif service == "mwaa":
-        hostname = f"mwaa.{LOCALHOST_HOSTNAME}"
+        hostname = f"mwaa.{subdomain_compatible_endpoint}"
+    elif service == "s3control":
+        # `s3control` sets the account-id as part of the subdomain of the endpoint
+        hostname = subdomain_compatible_endpoint
 
     return f"http://{hostname}:{EDGE_PORT}"
 
