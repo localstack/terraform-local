@@ -46,5 +46,9 @@ jobs:
       run: make install
     - name: Run code linter
       run: make lint
+    - name: Start LocalStack
+      uses: localstack/setup-localstack@v0.2.5
+      env:
+        LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
     - name: Run tests
       run: make test
