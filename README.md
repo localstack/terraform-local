@@ -36,10 +36,9 @@ pip install --user pipx
 Then, run pipx ensurepath to add pipx's binaries to your system's PATH. You may need to restart your shell for this to take effect.
 
 #### Install tflocal with pipx:
-Bash
-
+```Bash
 pipx install terraform-local
-
+```
 To upgrade tflocal in the future, run: pipx upgrade terraform-local.
 
 ##### 2) Alternative: Using a Virtual Environment
