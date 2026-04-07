@@ -26,6 +26,9 @@ if os.path.isdir(os.path.join(PARENT_FOLDER, ".venv")):
 
 from localstack_client import config  # noqa: E402
 import hcl2  # noqa: E402
+from hcl2 import SerializationOptions  # noqa: E402
+
+HCL2_SERIALIZATION_OPTIONS = SerializationOptions(strip_string_quotes=True)
 
 DRY_RUN = str(os.environ.get("DRY_RUN")).strip().lower() in ["1", "true"]
 DEFAULT_REGION = "us-east-1"
@@ -611,7 +614,7 @@ def parse_tf_files() -> dict:
     for _file in glob.glob("*.tf"):
         try:
             with open(_file, "r") as fp:
-                result[_file] = hcl2.load(fp)
+                result[_file] = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
         except Exception as e:
             print(f'Unable to parse "{_file}" as HCL file: {e}')
     return result
@@ -634,7 +637,7 @@ def get_provider_version_from_lock_file() -> Optional[version.Version]:
 
     provider_version = None
     with open(lock_file, "r") as fp:
-        result = hcl2.load(fp)
+        result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
         for provider in result.get("provider", []):
             for provider_name, provider_config in provider.items():
                 if provider_name.endswith(AWS_PROVIDER_NAME_SUFFIX):
