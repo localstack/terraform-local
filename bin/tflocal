@@ -28,7 +28,9 @@ from localstack_client import config  # noqa: E402
 import hcl2  # noqa: E402
 from hcl2 import SerializationOptions  # noqa: E402
 
-HCL2_SERIALIZATION_OPTIONS = SerializationOptions(strip_string_quotes=True)
+HCL2_SERIALIZATION_OPTIONS = SerializationOptions(
+    strip_string_quotes=True, explicit_blocks=False, with_comments=False
+)
 
 DRY_RUN = str(os.environ.get("DRY_RUN")).strip().lower() in ["1", "true"]
 DEFAULT_REGION = "us-east-1"
