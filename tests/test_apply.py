@@ -12,6 +12,11 @@ from packaging import version
 import boto3
 import pytest
 import hcl2
+from hcl2 import SerializationOptions
+
+HCL2_SERIALIZATION_OPTIONS = SerializationOptions(
+    strip_string_quotes=True, explicit_blocks=False, with_comments=False
+)
 
 # TODO set up the tests to run with tox so we can run the tests with different python versions
 
@@ -385,7 +390,7 @@ def test_s3_remote_data_source_with_workspace(monkeypatch):
     assert check_override_file_exists(override_file)
 
     with open(override_file, "r") as fp:
-        result = hcl2.load(fp)
+        result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
         assert result["data"][0]["terraform_remote_state"]["terraform_infra"]["workspace"] == "${terraform.workspace}"
         assert result["data"][1]["terraform_remote_state"]["build_infra"]["workspace"] == "build"
 
@@ -432,7 +437,7 @@ def test_versioned_endpoints(monkeypatch, provider_version):
         assert check_override_file_exists(override_file)
 
         with open(override_file, "r") as fp:
-            result = hcl2.load(fp)
+            result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
             endpoints = result["provider"][0]["aws"]["endpoints"][0]
             if provider_version == "5.99.1":
                 assert "iotanalytics" in endpoints
@@ -486,7 +491,7 @@ def test_subdomain_endpoints(monkeypatch, endpoint_host):
         assert check_override_file_exists(override_file)
 
         with open(override_file, "r") as fp:
-            result = hcl2.load(fp)
+            result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
             endpoints = result["provider"][0]["aws"]["endpoints"][0]
             assert "s3control" in endpoints
             assert "mwaa" in endpoints
@@ -570,7 +575,7 @@ def test_service_endpoint_alias_replacements(monkeypatch):
 def check_override_file_content(override_file):
     try:
         with open(override_file, "r") as fp:
-            result = hcl2.load(fp)
+            result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
             result = result["provider"][0]["aws"]
     except Exception as e:
         raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
@@ -616,7 +621,7 @@ def test_s3_backend_configs_merge(monkeypatch):
 def check_override_file_backend_extra_content(override_file):
     try:
         with open(override_file, "r") as fp:
-            result = hcl2.load(fp)
+            result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
             result = result["terraform"][0]["backend"][0]["s3"]
     except Exception as e:
         raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
@@ -690,7 +695,7 @@ def check_override_file_backend_endpoints_content(override_file, is_legacy: bool
     }
     try:
         with open(override_file, "r") as fp:
-            result = hcl2.load(fp)
+            result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
             result = result["terraform"][0]["backend"][0]["s3"]
     except Exception as e:
         print(f'Unable to parse "{override_file}" as HCL file: {e}')
@@ -727,7 +732,7 @@ def test_provider_aliases_ignored(monkeypatch):
 def check_override_file_content_for_alias(override_file):
     try:
         with open(override_file, "r") as fp:
-            result = hcl2.load(fp)
+            result = hcl2.load(fp, serialization_options=HCL2_SERIALIZATION_OPTIONS)
             result = result["provider"]
     except Exception as e:
         raise Exception(f'Unable to parse "{override_file}" as HCL file: {e}')
