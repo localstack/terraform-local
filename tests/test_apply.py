@@ -745,6 +745,11 @@ def check_override_file_content_for_alias(override_file):
 
 @pytest.mark.parametrize("version_flag", ["--version", "-v", "-version"])
 def test_version_command(monkeypatch, version_flag):
+    # OpenTofu 1.13 dropped the -v flag, and tflocal passes flags through unchanged
+    tf_cmd = os.environ.get("TF_CMD") or "terraform"
+    if version_flag == "-v" and subprocess.run([tf_cmd, "-v"], capture_output=True).returncode != 0:
+        pytest.skip(f"{tf_cmd} does not support the -v flag")
+
     def _run(cmd, **kwargs):
         kwargs["stderr"] = subprocess.STDOUT
         return subprocess.check_output(cmd, **kwargs)
