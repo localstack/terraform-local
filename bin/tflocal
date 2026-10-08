@@ -62,6 +62,8 @@ LOCALSTACK_HOSTNAME = (
     or LOCALHOST
 )
 EDGE_PORT = int(urlparse(AWS_ENDPOINT_URL).port or os.environ.get("EDGE_PORT") or 4566)
+LSTK_DOCS_URL = "https://docs.localstack.cloud/aws/developer-tools/running-localstack/lstk/"
+LSTK_MIGRATION_URL = "https://docs.localstack.cloud/aws/developer-tools/running-localstack/lstk/migration/#infrastructure-as-code"
 AWS_PROVIDER_NAME_SUFFIX = "/hashicorp/aws"
 AWS_PROVIDER_VERSION: Optional[version.Version] = None
 TF_VERSION: Optional[version.Version] = None
@@ -728,12 +730,43 @@ def to_str(obj) -> bytes:
     return obj.decode("UTF-8") if isinstance(obj, bytes) else obj
 
 
+def print_deprecation_notice():
+    """Point users to 'lstk terraform'. Goes to stderr to keep stdout clean."""
+    if str(os.environ.get("DISABLE_DEPRECATION_NOTICE")).strip().lower() in ["1", "true"]:
+        return
+
+    separator = "=" * 76
+    message = "\n".join(
+        [
+            separator,
+            "  WARNING: 'tflocal' is deprecated. Use 'lstk terraform' instead.",
+            separator,
+            "",
+            "  'tflocal' no longer receives updates.",
+            "",
+            "  Get started with 'lstk', the new LocalStack CLI:",
+            f"  {LSTK_DOCS_URL}",
+            "",
+            "  Switch your scripts and CI workflows to 'lstk terraform':",
+            f"  {LSTK_MIGRATION_URL}",
+            "",
+            separator,
+            "",
+            "Continuing with 'tflocal'...",
+            "",
+        ]
+    )
+    # flush now, since terraform may replace this process next (USE_EXEC)
+    print(message, file=sys.stderr, flush=True)
+
+
 # ---
 # MAIN ENTRYPOINT
 # ---
 
 
 def main():
+    print_deprecation_notice()
     env = dict(os.environ)
     cmd = [TF_CMD] + sys.argv[1:]
 

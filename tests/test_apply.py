@@ -759,6 +759,25 @@ def test_version_command(monkeypatch, version_flag):
         assert b"terraform-local v" in output
 
 
+def test_deprecation_notice(capsys):
+    import_cli_code()
+    print_deprecation_notice()  # noqa
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "WARNING: 'tflocal' is deprecated. Use 'lstk terraform' instead." in captured.err
+    assert f"{LSTK_MIGRATION_URL}\n" in captured.err  # noqa
+
+
+def test_deprecation_notice_disabled(monkeypatch, capsys):
+    monkeypatch.setenv("DISABLE_DEPRECATION_NOTICE", "1")
+    import_cli_code()
+    print_deprecation_notice()  # noqa
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
 ###
 # UTIL FUNCTIONS
 ###
