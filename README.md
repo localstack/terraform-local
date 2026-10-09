@@ -2,6 +2,14 @@
 
 # `tflocal` - Terraform with LocalStack
 
+> [!WARNING]
+> **`tflocal` is deprecated. Use `lstk terraform` instead.**
+>
+> `tflocal` no longer receives updates.
+>
+> - Get started with `lstk`, the new LocalStack CLI: [docs.localstack.cloud/.../lstk](https://docs.localstack.cloud/aws/developer-tools/running-localstack/lstk/)
+> - Switch your scripts and CI workflows to `lstk terraform`: [docs.localstack.cloud/.../lstk/migration](https://docs.localstack.cloud/aws/developer-tools/running-localstack/lstk/migration/#infrastructure-as-code)
+
 This package provides `tflocal` - a small wrapper script to run [Terraform](https://terraform.io) against [LocalStack](https://localstack.cloud).
 
 ## Prerequisites
@@ -83,6 +91,7 @@ The following environment variables can be configured:
 * `AWS_ACCESS_KEY_ID`: AWS Access Key ID to use for multi account setups (default: `test` -> account ID: `000000000000`)
 * `SKIP_ALIASES`: Allows to skip generating AWS provider overrides for specified aliased providers, e.g. `SKIP_ALIASES=aws_secrets,real_aws`
 * `ADDITIONAL_TF_OVERRIDE_LOCATIONS`: Comma-separated list of folder paths that will also receive a temporary `localstack_providers_override.tf` file
+* `DISABLE_DEPRECATION_NOTICE`: set to `1` to hide the deprecation notice
 
 ## Usage
 
@@ -117,6 +126,7 @@ ADDITIONAL_TF_OVERRIDE_LOCATIONS=/path/to/module1,path/to/module2 tflocal plan
 
 ## Change Log
 
+* v0.27.0: Print a deprecation notice that points to `lstk terraform`
 * v0.26.0: Fix compatibility with `python-hcl2` v8+ by using `SerializationOptions` to handle quoted dict keys, block metadata, and comments
 * v0.25.0: Improve `s3control` local endpoint override and respect `AWS_ENDPOINT_URL` configuration for `mwaa`
 * v0.24.1: Exclude broken `python-hcl2` version from requirements

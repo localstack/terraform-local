@@ -745,6 +745,11 @@ def check_override_file_content_for_alias(override_file):
 
 @pytest.mark.parametrize("version_flag", ["--version", "-v", "-version"])
 def test_version_command(monkeypatch, version_flag):
+    # OpenTofu 1.13 dropped the -v flag, and tflocal passes flags through unchanged
+    tf_cmd = os.environ.get("TF_CMD") or "terraform"
+    if version_flag == "-v" and subprocess.run([tf_cmd, "-v"], capture_output=True).returncode != 0:
+        pytest.skip(f"{tf_cmd} does not support the -v flag")
+
     def _run(cmd, **kwargs):
         kwargs["stderr"] = subprocess.STDOUT
         return subprocess.check_output(cmd, **kwargs)
@@ -757,6 +762,25 @@ def test_version_command(monkeypatch, version_flag):
         output = _run([TFLOCAL_BIN, version_flag], cwd=temp_dir, env=dict(os.environ))
 
         assert b"terraform-local v" in output
+
+
+def test_deprecation_notice(capsys):
+    import_cli_code()
+    print_deprecation_notice()  # noqa
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "WARNING: 'tflocal' is deprecated. Use 'lstk terraform' instead." in captured.err
+    assert f"{LSTK_MIGRATION_URL}\n" in captured.err  # noqa
+
+
+def test_deprecation_notice_disabled(monkeypatch, capsys):
+    monkeypatch.setenv("DISABLE_DEPRECATION_NOTICE", "1")
+    import_cli_code()
+    print_deprecation_notice()  # noqa
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
 
 
 ###
